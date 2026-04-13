@@ -1,4 +1,5 @@
 pub mod dashboard;
+pub mod events;
 pub mod health;
 pub mod proxy;
 pub mod stats;
@@ -27,6 +28,8 @@ pub fn router(state: AppState) -> Router {
         .route("/profiles", get(dashboard::profiles_page))
         .route("/sessions", get(dashboard::sessions_page))
         .route("/stats", get(dashboard::stats_page))
+        // SSE live-update stream — session required, cookie sent automatically.
+        .route("/api/events", get(events::events_handler))
         // API endpoints — session + CSRF protected.
         .route(
             "/api/credentials/{id}/toggle",

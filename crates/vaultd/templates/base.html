@@ -26,5 +26,21 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script>
+    // Connect to SSE and auto-refresh main page content on data changes.
+    (function() {
+        var es = new EventSource('/api/events');
+        ['stats', 'credential', 'lease'].forEach(function(evt) {
+            es.addEventListener(evt, function() {
+                htmx.ajax('GET', window.location.pathname, {target: 'main', swap: 'innerHTML'});
+            });
+        });
+        es.onerror = function() {
+            // Silently close on auth loss (e.g. session expired); page reload
+            // will redirect to /login via the server.
+            es.close();
+        };
+    })();
+    </script>
 </body>
 </html>
