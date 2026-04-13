@@ -82,7 +82,11 @@ mod tests {
             Some("/nonexistent/target/debug/vault-cli:/nonexistent/target/debug/vault-cli"),
         );
 
-        assert_eq!(paths.len(), 1, "duplicates should be removed, got: {paths:?}");
+        assert_eq!(
+            paths.len(),
+            1,
+            "duplicates should be removed, got: {paths:?}"
+        );
     }
 
     /// Blank entries in the env override are ignored.
@@ -93,14 +97,17 @@ mod tests {
             Some(":/nonexistent/target/debug/vault-cli:  :"),
         );
 
-        assert_eq!(paths.len(), 1, "blank entries should be ignored, got: {paths:?}");
+        assert_eq!(
+            paths.len(),
+            1,
+            "blank entries should be ignored, got: {paths:?}"
+        );
     }
 
     /// No env override — only the primary exe is returned.
     #[test]
     fn trusted_application_paths_without_override() {
-        let paths =
-            trusted_application_paths_for("/nonexistent/target/debug/vault-cli", None);
+        let paths = trusted_application_paths_for("/nonexistent/target/debug/vault-cli", None);
 
         assert_eq!(paths.len(), 1);
         assert!(paths[0].ends_with("target/debug/vault-cli"));
@@ -125,6 +132,10 @@ mod tests {
     fn trusted_application_paths_deduplicates_across_canonical_forms() {
         // /tmp and /private/tmp are the same path on macOS.
         let paths = trusted_application_paths_for("/tmp", Some("/private/tmp"));
-        assert_eq!(paths.len(), 1, "canonical duplicates should be removed, got: {paths:?}");
+        assert_eq!(
+            paths.len(),
+            1,
+            "canonical duplicates should be removed, got: {paths:?}"
+        );
     }
 }

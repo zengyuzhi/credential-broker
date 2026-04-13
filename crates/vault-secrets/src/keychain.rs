@@ -70,8 +70,11 @@ impl MacOsKeychainStore {
     /// can read the item without triggering a user-interaction prompt. The item is
     /// created or updated (`-U` flag) atomically by the system tool.
     ///
-    /// The secret is piped via stdin (not passed as a CLI argument) to avoid exposing
-    /// it in process listings.
+    /// **Note:** The secret is passed via the `-w` CLI argument because macOS `security
+    /// add-generic-password` does not support reading from stdin. This means the secret
+    /// is briefly visible in process listings. This is acceptable for a local single-user
+    /// tool but should be replaced with direct Security.framework API calls if the threat
+    /// model changes.
     ///
     /// The `secret_ref` returned follows the existing `"service:account"` convention.
     pub async fn put_with_access(
@@ -118,9 +121,7 @@ impl MacOsKeychainStore {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "security add-generic-password failed for {service}/{account}: {stderr}"
-            );
+            anyhow::bail!("security add-generic-password failed for {service}/{account}: {stderr}");
         }
 
         Ok(format!("{service}:{account}"))
@@ -190,8 +191,7 @@ mod tests {
     fn options_deduplicates_trusted_apps() {
         let path = PathBuf::from("/usr/local/bin/vault-cli");
         let apps = vec![path.clone(), path.clone(), path.clone()];
-        let opts =
-            generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
+        let opts = generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
 
         assert_eq!(
             opts.trusted_apps.len(),
@@ -208,8 +208,7 @@ mod tests {
         let a = PathBuf::from("/usr/local/bin/vault-cli");
         let b = PathBuf::from("/opt/homebrew/bin/vault-cli");
         let apps = vec![a.clone(), b.clone()];
-        let opts =
-            generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
+        let opts = generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
 
         assert_eq!(opts.trusted_apps.len(), 2);
         assert!(opts.trusted_apps.contains(&a));
@@ -222,8 +221,7 @@ mod tests {
         let a = PathBuf::from("/usr/local/bin/vault-cli");
         let b = PathBuf::from("/opt/homebrew/bin/vault-cli");
         let apps = vec![a.clone(), b.clone(), a.clone()];
-        let opts =
-            generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
+        let opts = generic_password_options_with_trusted_apps("svc", "acct", &apps).unwrap();
 
         assert_eq!(
             opts.trusted_apps.len(),
@@ -237,9 +235,7 @@ mod tests {
     #[tokio::test]
     async fn put_with_access_rejects_empty_trusted_apps() {
         let store = MacOsKeychainStore;
-        let result = store
-            .put_with_access("svc", "acct", "secret", &[])
-            .await;
+        let result = store.put_with_access("svc", "acct", "secret", &[]).await;
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(

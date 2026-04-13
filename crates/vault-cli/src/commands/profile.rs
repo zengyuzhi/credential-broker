@@ -237,6 +237,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn create_profile_should_persist_and_show() {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();
@@ -250,6 +251,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn list_profiles_should_include_created_profile() {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();
@@ -264,6 +266,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn bind_profile_should_show_binding_details() {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();

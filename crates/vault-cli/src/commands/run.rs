@@ -164,7 +164,7 @@ async fn resolve_bound_credentials(
     bindings: Vec<vault_core::models::ProfileBinding>,
 ) -> anyhow::Result<Vec<(String, AccessMode, ResolvedCredential)>> {
     #[cfg(target_os = "macos")]
-    let keychain = vault_secrets::MacOsKeychainStore::default();
+    let keychain = vault_secrets::MacOsKeychainStore;
 
     let mut resolved = Vec::new();
     for binding in bindings {

@@ -87,14 +87,24 @@ async fn add_credential(
 
     #[cfg(target_os = "macos")]
     let secret_ref = {
-        let keychain = vault_secrets::MacOsKeychainStore::default();
+        let keychain = vault_secrets::MacOsKeychainStore;
         let account = build_keychain_account(credential_id, field_name);
         let current_exe = std::env::current_exe()?;
         let env_override = std::env::var("VAULT_TRUSTED_APP_PATHS").ok();
-        let trusted_apps =
-            keychain_account_and_access_targets(credential_id, field_name, &current_exe, env_override.as_deref())?.1;
+        let trusted_apps = keychain_account_and_access_targets(
+            credential_id,
+            field_name,
+            &current_exe,
+            env_override.as_deref(),
+        )?
+        .1;
         keychain
-            .put_with_access(KEYCHAIN_SERVICE_NAME, &account, &secret_value, &trusted_apps)
+            .put_with_access(
+                KEYCHAIN_SERVICE_NAME,
+                &account,
+                &secret_value,
+                &trusted_apps,
+            )
             .await?
     };
 
@@ -189,7 +199,7 @@ async fn remove_credential(id: &str, yes: bool) -> anyhow::Result<()> {
 
     #[cfg(target_os = "macos")]
     {
-        let keychain = vault_secrets::MacOsKeychainStore::default();
+        let keychain = vault_secrets::MacOsKeychainStore;
         keychain.delete(&service, &account).await?;
     }
 
@@ -293,9 +303,8 @@ mod tests {
         let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").expect("uuid");
         let fake_exe = Path::new("/nonexistent/target/debug/vault-cli");
 
-        let (account, paths) =
-            keychain_account_and_access_targets(id, "api_key", fake_exe, None)
-                .expect("helper should succeed");
+        let (account, paths) = keychain_account_and_access_targets(id, "api_key", fake_exe, None)
+            .expect("helper should succeed");
 
         // Account must follow the established convention.
         assert_eq!(
@@ -304,10 +313,7 @@ mod tests {
         );
 
         // The trusted-path list must contain the resolved vault-cli path.
-        assert!(
-            !paths.is_empty(),
-            "trusted paths must not be empty"
-        );
+        assert!(!paths.is_empty(), "trusted paths must not be empty");
         assert!(
             paths.iter().any(|p| p.ends_with("vault-cli")),
             "expected vault-cli in trusted paths, got: {paths:?}"
@@ -352,6 +358,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn set_credential_enabled_should_use_current_database_url_override() {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();

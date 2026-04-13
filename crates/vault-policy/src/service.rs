@@ -1,14 +1,8 @@
 use anyhow::{Result, bail};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PolicyService {
     pub allow_prod: bool,
-}
-
-impl Default for PolicyService {
-    fn default() -> Self {
-        Self { allow_prod: false }
-    }
 }
 
 impl PolicyService {
