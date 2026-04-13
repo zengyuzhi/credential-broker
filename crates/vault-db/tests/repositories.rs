@@ -1,7 +1,7 @@
 use chrono::Utc;
 use tempfile::TempDir;
 use uuid::Uuid;
-use vault_core::models::{AccessMode, Credential, CredentialKind, Profile, ProfileBinding};
+use vault_core::models::{AccessMode, Credential, CredentialKind, Profile, ProfileBinding, UsageEvent};
 use vault_db::Store;
 
 fn sample_credential(provider: &str, label: &str) -> Credential {
@@ -198,4 +198,74 @@ async fn create_profile_and_binding_should_be_queryable() {
     assert_eq!(bindings[0].provider, "twitterapi");
     assert_eq!(bindings[0].credential_id, credential.id);
     assert!(matches!(bindings[0].mode, AccessMode::Inject));
+}
+
+fn sample_usage_event(credential_id: Uuid) -> UsageEvent {
+    UsageEvent {
+        id: Uuid::new_v4(),
+        provider: "openai".to_string(),
+        credential_id,
+        lease_id: None,
+        agent_name: "test-agent".to_string(),
+        project: Some("my-project".to_string()),
+        mode: AccessMode::Inject,
+        operation: "chat_completion".to_string(),
+        endpoint: Some("/v1/chat/completions".to_string()),
+        model: Some("gpt-4o".to_string()),
+        request_count: 1,
+        prompt_tokens: Some(100),
+        completion_tokens: Some(200),
+        total_tokens: Some(300),
+        estimated_cost_usd: Some(0.005),
+        status_code: Some(200),
+        success: true,
+        latency_ms: 450,
+        error_text: None,
+        created_at: Utc::now(),
+    }
+}
+
+#[tokio::test]
+async fn insert_usage_event_should_be_queryable() {
+    let test_store = temp_store().await;
+    let credential = sample_credential("openai", "work");
+
+    test_store
+        .store
+        .insert_credential(&credential)
+        .await
+        .expect("insert credential");
+
+    let event = sample_usage_event(credential.id);
+    let event_id = event.id;
+
+    test_store
+        .store
+        .insert_usage_event(&event)
+        .await
+        .expect("insert usage event");
+
+    let events = test_store
+        .store
+        .list_usage_events(10)
+        .await
+        .expect("list usage events");
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, event_id);
+    assert_eq!(events[0].provider, "openai");
+    assert_eq!(events[0].credential_id, credential.id);
+    assert_eq!(events[0].agent_name, "test-agent");
+    assert_eq!(events[0].project.as_deref(), Some("my-project"));
+    assert!(matches!(events[0].mode, AccessMode::Inject));
+    assert_eq!(events[0].operation, "chat_completion");
+    assert_eq!(events[0].model.as_deref(), Some("gpt-4o"));
+    assert_eq!(events[0].request_count, 1);
+    assert_eq!(events[0].prompt_tokens, Some(100));
+    assert_eq!(events[0].completion_tokens, Some(200));
+    assert_eq!(events[0].total_tokens, Some(300));
+    assert_eq!(events[0].status_code, Some(200));
+    assert!(events[0].success);
+    assert_eq!(events[0].latency_ms, 450);
+    assert!(events[0].error_text.is_none());
 }
