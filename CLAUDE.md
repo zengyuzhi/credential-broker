@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cargo build                          # build all crates
 cargo test                           # run all tests
-cargo clippy                         # lint
+cargo clippy --workspace --all-targets -- -D warnings  # lint (strict)
 cargo run -p vault-cli -- <subcmd>   # run CLI (e.g. credential list)
 cargo run -p vaultd                  # start daemon on 127.0.0.1:8765
 cargo test -p vault-db               # test a single crate
@@ -61,3 +61,11 @@ Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd
 - Timestamps are ISO 8601 strings in SQLite (`chrono` for serialization)
 - Errors: `VaultError` (thiserror) for domain errors, `anyhow::Result` for plumbing
 - macOS-only for now: `vault-secrets` uses `security-framework` behind `#[cfg(target_os = "macos")]`
+
+## Gotchas
+
+- `security-framework` v3 does NOT bind Keychain ACL APIs (`SecAccessCreate`, `SecTrustedApplicationCreateFromPath`). Trusted-app ACLs use `/usr/bin/security` CLI — always absolute path, never bare `security`.
+- macOS `security add-generic-password`: place `-w` as the **last** argument with no value to read the password from stdin (avoids process-list exposure).
+- `MacOsKeychainStore` is a unit struct — construct with `MacOsKeychainStore`, not `MacOsKeychainStore::default()` (clippy `default_constructed_unit_structs`).
+- Tests use `std::sync::Mutex` for DB URL serialization across async tests — annotate with `#[allow(clippy::await_holding_lock)]`.
+- Implementation plans live in `docs/plans/` — check there before starting new work.
