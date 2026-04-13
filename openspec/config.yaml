@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Rust 2024, stable toolchain
+  Workspace: 8 crates (vault-core, vault-db, vault-secrets, vault-providers, vault-policy, vault-telemetry, vault-cli, vaultd)
+  Binaries: vault-cli (clap CLI), vaultd (axum HTTP daemon on 127.0.0.1:8765)
+  Database: SQLite via sqlx, auto-migrated, at .local/vault.db
+  Secrets: macOS Keychain via security-framework, service name ai.zyr1.vault
+  Testing: cargo test, TDD preferred, 49+ tests across all crates
+  Linting: cargo clippy --workspace --all-targets -- -D warnings (strict, warnings=errors)
+  Conventions: UUID v4 IDs as TEXT in SQLite, ISO 8601 timestamps, thiserror for domain errors, anyhow for plumbing
+  Domain: local credential broker for coding agents — stores API keys in Keychain, injects via env vars or HTTP proxy, tracks usage
+  Platform: macOS-only (Keychain integration), cfg-gated for future cross-platform
+  Plans: implementation plans live in docs/plans/ — check before starting new work
+
+rules:
+  proposal:
+    - Include a "Security Implications" section for any change touching secrets, credentials, or auth
+    - Identify which crates are affected and their dependency relationships
+    - Always include an "Out of scope" section
+  specs:
+    - Use Given/When/Then format for behavioral scenarios
+    - Include error cases and edge cases explicitly
+    - Reference exact file paths for affected modules
+  design:
+    - Follow existing crate boundary patterns — vault-core has no internal deps, everything depends on it
+    - New functionality should extend existing traits (SecretStore, ProviderAdapter) rather than creating parallel abstractions
+    - macOS-specific code must be behind #[cfg(target_os = "macos")] with a bail fallback
+  tasks:
+    - Each task must follow TDD: write failing test, run it, implement, verify pass, commit
+    - Include exact cargo test commands with expected outcomes
+    - One commit per task with conventional commit messages (feat/fix/refactor/docs/test/chore)
+    - Show complete code in every step — no placeholders or "similar to Task N"
