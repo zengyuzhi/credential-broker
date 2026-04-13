@@ -1,6 +1,7 @@
 mod app;
 mod auth;
 mod routes;
+mod static_assets;
 
 use std::net::SocketAddr;
 

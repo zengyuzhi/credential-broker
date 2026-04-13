@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault — Login</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <main class="container" style="max-width: 400px; margin-top: 4rem;">
+        <article>
+            <header>
+                <h2>Vault Login</h2>
+                <p>Enter the 6-digit PIN displayed in your terminal.</p>
+            </header>
+
+            <div id="login-error" style="display: none;" role="alert">
+                <p style="color: var(--pico-del-color);">Invalid PIN. Please try again.</p>
+            </div>
+
+            <form
+                id="login-form"
+                hx-post="/api/auth/login"
+                hx-ext="json-enc"
+                hx-target="#login-error"
+                hx-swap="outerHTML"
+                hx-on::after-request="handleLoginResponse(event)"
+            >
+                <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
+                <label for="pin">
+                    PIN
+                    <input
+                        type="password"
+                        id="pin"
+                        name="pin"
+                        inputmode="numeric"
+                        pattern="[0-9]{6}"
+                        maxlength="6"
+                        minlength="6"
+                        placeholder="000000"
+                        required
+                        autofocus
+                    >
+                </label>
+                <button type="submit" class="contrast">Unlock</button>
+            </form>
+
+            <footer>
+                <small>This interface is only accessible from localhost.</small>
+            </footer>
+        </article>
+    </main>
+
+    <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+    <script>
+        function handleLoginResponse(event) {
+            var xhr = event.detail.xhr;
+            if (xhr.status === 200) {
+                // Redirect to dashboard on success.
+                window.location.href = '/';
+            } else {
+                var errDiv = document.getElementById('login-error');
+                if (errDiv) {
+                    errDiv.style.display = '';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

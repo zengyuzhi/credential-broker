@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Vault{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div style="display: flex; min-height: 100vh;">
+        <nav style="width: 200px; padding: 1rem; border-right: 1px solid var(--pico-muted-border-color);">
+            <ul>
+                <li><strong>Vault</strong></li>
+            </ul>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/credentials">Credentials</a></li>
+                <li><a href="/profiles">Profiles</a></li>
+                <li><a href="/stats">Stats</a></li>
+                <li><a href="/sessions">Sessions</a></li>
+            </ul>
+        </nav>
+        <main class="container" style="flex: 1; padding: 2rem;">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

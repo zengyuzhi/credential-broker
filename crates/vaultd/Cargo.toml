@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.4"
 axum.workspace = true
 blake3.workspace = true
 chrono.workspace = true
