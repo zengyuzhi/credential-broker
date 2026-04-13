@@ -66,14 +66,15 @@ pub(crate) fn explain_keychain_read_error(message: &str) -> String {
 }
 
 #[derive(Debug, Args)]
+#[command(about = "Launch a command with credentials injected from a profile")]
 pub struct RunCommand {
-    #[arg(long)]
+    #[arg(long, help = "Profile name whose bindings supply credentials")]
     pub profile: String,
-    #[arg(long, default_value = "unknown-agent")]
+    #[arg(long, default_value = "unknown-agent", help = "Agent identifier recorded in lease and telemetry")]
     pub agent: String,
-    #[arg(long)]
+    #[arg(long, help = "Optional project name injected as VAULT_PROJECT")]
     pub project: Option<String>,
-    #[arg(last = true, required = true)]
+    #[arg(last = true, required = true, help = "Command and arguments to execute")]
     pub command: Vec<String>,
 }
 

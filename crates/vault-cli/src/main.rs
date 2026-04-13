@@ -9,7 +9,10 @@ use commands::{
 
 #[derive(Debug, Parser)]
 #[command(name = "vault")]
-#[command(about = "Local credential broker CLI", long_about = None)]
+#[command(about = "Local credential broker for coding agents and scripts")]
+#[command(long_about = "Store API keys securely in macOS Keychain, organize them into named profiles, \
+    and launch agent subprocesses with credentials injected as environment variables \
+    or forwarded through an authenticated HTTP proxy. Every access is lease-bounded and tracked.")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -17,9 +20,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(about = "Add, list, enable, disable, or remove stored credentials")]
     Credential(commands::credential::CredentialCommand),
+    #[command(about = "Create and manage named profiles that bundle provider credentials")]
     Profile(commands::profile::ProfileCommand),
+    #[command(about = "Launch a command with credentials injected from a profile")]
     Run(commands::run::RunCommand),
+    #[command(about = "Display usage statistics per provider")]
     Stats(commands::stats::StatsCommand),
 }
 

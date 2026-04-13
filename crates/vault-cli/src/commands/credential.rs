@@ -15,6 +15,7 @@ use crate::support::{
 };
 
 #[derive(Debug, Args)]
+#[command(about = "Add, list, enable, disable, or remove stored credentials")]
 pub struct CredentialCommand {
     #[command(subcommand)]
     pub command: CredentialSubcommand,
@@ -22,24 +23,34 @@ pub struct CredentialCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum CredentialSubcommand {
+    #[command(about = "Store a new credential in macOS Keychain")]
     Add {
+        #[arg(help = "Provider name (e.g. openai, anthropic, twitterapi)")]
         provider: String,
+        #[arg(help = "Human-readable label for this credential")]
         label: String,
-        #[arg(long, default_value = "api_key")]
+        #[arg(long, default_value = "api_key", help = "Credential type: api_key, bearer_token, oauth, bundle")]
         kind: String,
-        #[arg(long, default_value = "work")]
+        #[arg(long, default_value = "work", help = "Environment tag: work, personal, prod")]
         env: String,
     },
+    #[command(about = "List all stored credentials")]
     List,
+    #[command(about = "Disable a credential (prevents use in profiles)")]
     Disable {
+        #[arg(help = "Credential UUID to disable")]
         id: String,
     },
+    #[command(about = "Re-enable a previously disabled credential")]
     Enable {
+        #[arg(help = "Credential UUID to enable")]
         id: String,
     },
+    #[command(about = "Permanently remove a credential and its Keychain secret")]
     Remove {
+        #[arg(help = "Credential UUID to remove")]
         id: String,
-        #[arg(long)]
+        #[arg(long, help = "Skip confirmation prompt")]
         yes: bool,
     },
 }

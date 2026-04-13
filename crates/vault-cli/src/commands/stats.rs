@@ -5,8 +5,9 @@ use vault_db::Store;
 use crate::support::config::current_database_url;
 
 #[derive(Debug, Args)]
+#[command(about = "Display usage statistics per provider")]
 pub struct StatsCommand {
-    #[arg(long)]
+    #[arg(long, help = "Filter stats to a single provider (e.g. openai)")]
     pub provider: Option<String>,
 }
 

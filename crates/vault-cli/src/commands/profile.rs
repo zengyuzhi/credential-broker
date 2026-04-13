@@ -9,6 +9,7 @@ use vault_providers::schema_for;
 use crate::support::{config::current_database_url, prompt::print_success};
 
 #[derive(Debug, Args)]
+#[command(about = "Create and manage named profiles that bundle provider credentials")]
 pub struct ProfileCommand {
     #[command(subcommand)]
     pub command: ProfileSubcommand,
@@ -16,18 +17,27 @@ pub struct ProfileCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ProfileSubcommand {
+    #[command(about = "Create a new named profile")]
     Create {
+        #[arg(help = "Profile name (used in vault run --profile)")]
         name: String,
     },
+    #[command(about = "List all profiles")]
     List,
+    #[command(about = "Bind a credential to a profile for a specific provider")]
     Bind {
+        #[arg(help = "Profile name to bind to")]
         profile: String,
+        #[arg(help = "Provider to bind (e.g. openai, anthropic)")]
         provider: String,
+        #[arg(help = "Credential UUID to bind")]
         credential_id: String,
-        #[arg(long, default_value = "either")]
+        #[arg(long, default_value = "either", help = "Access mode: inject (env vars), proxy (HTTP forwarding), or either")]
         mode: String,
     },
+    #[command(about = "Show profile details and its bindings")]
     Show {
+        #[arg(help = "Profile name to inspect")]
         name: String,
     },
 }
