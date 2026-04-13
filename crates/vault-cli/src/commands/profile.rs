@@ -133,9 +133,6 @@ pub async fn bind_profile(
     let policy = PolicyService::default();
     policy.ensure_environment_allowed(&credential.environment)?;
 
-    if matches!(access_mode, AccessMode::Proxy) {
-        bail!("proxy bindings are not enabled in Phase 1");
-    }
     if schema.default_mode == AccessMode::Inject && matches!(access_mode, AccessMode::Either) {
         // allowed, just more permissive than the provider default
     }
