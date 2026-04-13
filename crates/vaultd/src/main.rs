@@ -1,4 +1,5 @@
 mod app;
+mod auth;
 mod routes;
 
 use std::net::SocketAddr;
