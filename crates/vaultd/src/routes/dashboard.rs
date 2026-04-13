@@ -2,10 +2,11 @@
 
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
 };
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::app::AppState;
@@ -253,6 +254,112 @@ pub async fn sessions_page(_auth: AuthSession, State(state): State<AppState>) ->
     let tmpl = SessionsTemplate {
         active_leases,
         expired_leases,
+    };
+
+    match tmpl.render() {
+        Ok(html) => Html(html).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("template error: {err}"),
+        )
+            .into_response(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Stats page
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct StatsQuery {
+    pub provider: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "stats.html")]
+pub struct StatsTemplate {
+    pub provider_stats: Vec<vault_db::ProviderStats>,
+    pub recent_events: Vec<vault_core::models::UsageEvent>,
+    pub providers: Vec<String>,
+    pub selected_provider: String,
+}
+
+/// `GET /stats` — usage statistics page with optional provider filter.
+pub async fn stats_page(
+    _auth: AuthSession,
+    State(state): State<AppState>,
+    Query(params): Query<StatsQuery>,
+) -> Response {
+    let store = &state.store;
+
+    let all_stats = match store.usage_stats_by_provider().await {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::error!("failed to load provider stats: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load usage stats".to_string(),
+            )
+                .into_response();
+        }
+    };
+
+    let providers: Vec<String> = all_stats.iter().map(|s| s.provider.clone()).collect();
+
+    let selected_provider = params
+        .provider
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    let (provider_stats, recent_events) = if selected_provider.is_empty() {
+        let events = match store.list_usage_events(20).await {
+            Ok(e) => e,
+            Err(err) => {
+                tracing::error!("failed to list usage events: {err}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to load recent events".to_string(),
+                )
+                    .into_response();
+            }
+        };
+        (all_stats, events)
+    } else {
+        let stats = match store.usage_stats_for_provider(&selected_provider).await {
+            Ok(opt) => opt.map(|s| vec![s]).unwrap_or_default(),
+            Err(err) => {
+                tracing::error!("failed to load stats for provider {selected_provider}: {err}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to load provider stats".to_string(),
+                )
+                    .into_response();
+            }
+        };
+        let events = match store
+            .list_usage_events_for_provider(&selected_provider, 20)
+            .await
+        {
+            Ok(e) => e,
+            Err(err) => {
+                tracing::error!("failed to list events for provider {selected_provider}: {err}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to load recent events".to_string(),
+                )
+                    .into_response();
+            }
+        };
+        (stats, events)
+    };
+
+    let tmpl = StatsTemplate {
+        provider_stats,
+        recent_events,
+        providers,
+        selected_provider,
     };
 
     match tmpl.render() {

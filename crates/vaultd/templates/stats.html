@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Stats — Vault{% endblock %}
+{% block content %}
+<h2>Usage Statistics</h2>
+
+<form>
+    <fieldset role="group">
+        <select name="provider"
+                hx-get="/stats"
+                hx-target="#stats-content"
+                hx-swap="innerHTML"
+                hx-select="#stats-content > *"
+                hx-push-url="true">
+            <option value="">All Providers</option>
+            {% for p in providers %}
+            <option value="{{ p }}" {% if p.as_str() == selected_provider %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+    </fieldset>
+</form>
+
+<div id="stats-content">
+    <h3>Summary</h3>
+    {% if provider_stats.is_empty() %}
+    <p>No usage data.</p>
+    {% else %}
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Provider</th>
+                    <th>Requests</th>
+                    <th>Prompt Tokens</th>
+                    <th>Completion Tokens</th>
+                    <th>Total Tokens</th>
+                    <th>Est. Cost (USD)</th>
+                    <th>Last Used</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in provider_stats %}
+                <tr>
+                    <td>{{ stat.provider }}</td>
+                    <td>{{ stat.request_count }}</td>
+                    <td>{{ stat.prompt_tokens }}</td>
+                    <td>{{ stat.completion_tokens }}</td>
+                    <td>{{ stat.total_tokens }}</td>
+                    <td>${{ stat.estimated_cost_usd }}</td>
+                    <td>{{ stat.last_used_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+    {% endif %}
+
+    <h3>Recent Events</h3>
+    {% if recent_events.is_empty() %}
+    <p>No recent events.</p>
+    {% else %}
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Provider</th>
+                    <th>Agent</th>
+                    <th>Operation</th>
+                    <th>Model</th>
+                    <th>Tokens</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in recent_events %}
+                <tr>
+                    <td>{{ event.created_at }}</td>
+                    <td>{{ event.provider }}</td>
+                    <td>{{ event.agent_name }}</td>
+                    <td>{{ event.operation }}</td>
+                    <td>{% match event.model %}{% when Some with (m) %}{{ m }}{% when None %}—{% endmatch %}</td>
+                    <td>{% match event.total_tokens %}{% when Some with (t) %}{{ t }}{% when None %}—{% endmatch %}</td>
+                    <td>{% if event.success %}&#10003;{% else %}&#10007;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+    {% endif %}
+</div>
+{% endblock %}

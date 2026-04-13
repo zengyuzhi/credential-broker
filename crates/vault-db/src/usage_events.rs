@@ -114,6 +114,63 @@ impl Store {
 
         rows.into_iter().map(map_usage_event_row).collect()
     }
+
+    /// Stats for a single provider.
+    pub async fn usage_stats_for_provider(&self, provider: &str) -> Result<Option<ProviderStats>> {
+        let row = sqlx::query(
+            "SELECT provider, \
+             SUM(request_count) as request_count, \
+             COALESCE(SUM(prompt_tokens), 0) as prompt_tokens, \
+             COALESCE(SUM(completion_tokens), 0) as completion_tokens, \
+             COALESCE(SUM(total_tokens), 0) as total_tokens, \
+             COALESCE(SUM(estimated_cost_usd), 0.0) as estimated_cost_usd, \
+             MAX(created_at) as last_used_at \
+             FROM usage_events \
+             WHERE provider = ?1 \
+             GROUP BY provider",
+        )
+        .bind(provider)
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to query usage stats for provider")?;
+
+        row.map(|r| {
+            Ok(ProviderStats {
+                provider: r.get("provider"),
+                request_count: r.get("request_count"),
+                prompt_tokens: r.get("prompt_tokens"),
+                completion_tokens: r.get("completion_tokens"),
+                total_tokens: r.get("total_tokens"),
+                estimated_cost_usd: r.get("estimated_cost_usd"),
+                last_used_at: r.get("last_used_at"),
+            })
+        })
+        .transpose()
+    }
+
+    /// List usage events filtered by provider.
+    pub async fn list_usage_events_for_provider(
+        &self,
+        provider: &str,
+        limit: i64,
+    ) -> Result<Vec<UsageEvent>> {
+        let rows = sqlx::query(
+            "SELECT id, provider, credential_id, lease_id, agent_name, project, \
+             mode, operation, endpoint, model, request_count, \
+             prompt_tokens, completion_tokens, total_tokens, \
+             estimated_cost_usd, status_code, success, latency_ms, \
+             error_text, created_at \
+             FROM usage_events \
+             WHERE provider = ?1 \
+             ORDER BY created_at DESC \
+             LIMIT ?2",
+        )
+        .bind(provider)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(map_usage_event_row).collect()
+    }
 }
 
 fn map_usage_event_row(row: sqlx::sqlite::SqliteRow) -> Result<UsageEvent> {
