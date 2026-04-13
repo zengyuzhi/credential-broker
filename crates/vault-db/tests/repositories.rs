@@ -1,7 +1,9 @@
 use chrono::Utc;
 use tempfile::TempDir;
 use uuid::Uuid;
-use vault_core::models::{AccessMode, Credential, CredentialKind, Profile, ProfileBinding, UsageEvent};
+use vault_core::models::{
+    AccessMode, Credential, CredentialKind, Profile, ProfileBinding, UsageEvent,
+};
 use vault_db::{ProviderStats, Store};
 
 fn sample_credential(provider: &str, label: &str) -> Credential {

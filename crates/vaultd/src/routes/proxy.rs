@@ -47,7 +47,10 @@ pub async fn proxy_handler(
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid lease token".to_string()))?;
 
     if lease.expires_at < Utc::now() {
-        return Err((StatusCode::UNAUTHORIZED, "lease token has expired".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "lease token has expired".to_string(),
+        ));
     }
 
     // --- 2. Resolve provider adapter ---
@@ -87,8 +90,7 @@ pub async fn proxy_handler(
     let binding = bindings
         .into_iter()
         .find(|b| {
-            b.provider == provider
-                && matches!(b.mode, AccessMode::Proxy | AccessMode::Either)
+            b.provider == provider && matches!(b.mode, AccessMode::Proxy | AccessMode::Either)
         })
         .ok_or_else(|| {
             (

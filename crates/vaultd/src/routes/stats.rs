@@ -18,7 +18,11 @@ pub fn stats_router() -> Router<AppState> {
 }
 
 async fn stats_providers(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let stats = state.store.usage_stats_by_provider().await.unwrap_or_default();
+    let stats = state
+        .store
+        .usage_stats_by_provider()
+        .await
+        .unwrap_or_default();
     let providers: Vec<ProviderStatResponse> = stats
         .into_iter()
         .map(|s| ProviderStatResponse {

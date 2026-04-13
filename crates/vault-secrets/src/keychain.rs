@@ -111,9 +111,10 @@ impl MacOsKeychainStore {
 
         // Write the secret to stdin then close it so `security` proceeds.
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(secret.as_bytes()).await.context(
-                "failed to write secret to security stdin",
-            )?;
+            stdin
+                .write_all(secret.as_bytes())
+                .await
+                .context("failed to write secret to security stdin")?;
             stdin.shutdown().await.ok();
         }
 
@@ -124,9 +125,7 @@ impl MacOsKeychainStore {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "security add-generic-password failed for {service}/{account}: {stderr}"
-            );
+            anyhow::bail!("security add-generic-password failed for {service}/{account}: {stderr}");
         }
 
         Ok(format!("{service}:{account}"))

@@ -20,10 +20,10 @@ pub async fn run_stats_command(cmd: StatsCommand) -> Result<()> {
     }
 
     for stat in &stats {
-        if let Some(ref filter) = cmd.provider {
-            if stat.provider != *filter {
-                continue;
-            }
+        if let Some(ref filter) = cmd.provider
+            && stat.provider != *filter
+        {
+            continue;
         }
         println!(
             "provider={} requests={} prompt_tokens={} completion_tokens={} cost_usd={:.4} last_used={}",
@@ -136,7 +136,9 @@ mod tests {
         let cmd = StatsCommand {
             provider: Some("openai".to_string()),
         };
-        run_stats_command(cmd).await.expect("stats with filter should succeed");
+        run_stats_command(cmd)
+            .await
+            .expect("stats with filter should succeed");
 
         // Run stats with a provider filter that does NOT match — should produce no output.
         let cmd = StatsCommand {
