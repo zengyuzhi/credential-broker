@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use serde::Serialize;
 use sqlx::Row;
 use uuid::Uuid;
 use vault_core::models::UsageEvent;
@@ -8,7 +9,7 @@ use crate::{
     store::Store,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProviderStats {
     pub provider: String,
     pub request_count: i64,

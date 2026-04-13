@@ -9,11 +9,27 @@ use crate::support::config::current_database_url;
 pub struct StatsCommand {
     #[arg(long, help = "Filter stats to a single provider (e.g. openai)")]
     pub provider: Option<String>,
+    #[arg(long, help = "Output stats as a JSON array")]
+    pub json: bool,
 }
 
 pub async fn run_stats_command(cmd: StatsCommand) -> Result<()> {
     let store = Store::connect(&current_database_url()).await?;
-    let stats = store.usage_stats_by_provider().await?;
+    let all_stats = store.usage_stats_by_provider().await?;
+
+    // Apply provider filter (spec: filter before serialization).
+    let stats: Vec<_> = match &cmd.provider {
+        Some(filter) => all_stats
+            .into_iter()
+            .filter(|s| s.provider == *filter)
+            .collect(),
+        None => all_stats,
+    };
+
+    if cmd.json {
+        println!("{}", serde_json::to_string_pretty(&stats)?);
+        return Ok(());
+    }
 
     if stats.is_empty() {
         println!("No usage events recorded yet.");
@@ -21,11 +37,6 @@ pub async fn run_stats_command(cmd: StatsCommand) -> Result<()> {
     }
 
     for stat in &stats {
-        if let Some(ref filter) = cmd.provider
-            && stat.provider != *filter
-        {
-            continue;
-        }
         println!(
             "provider={} requests={} prompt_tokens={} completion_tokens={} cost_usd={:.4} last_used={}",
             stat.provider,
@@ -66,7 +77,7 @@ mod tests {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();
 
-        let cmd = StatsCommand { provider: None };
+        let cmd = StatsCommand { provider: None, json: false };
         run_stats_command(cmd).await.expect("stats should succeed");
 
         clear_test_database_url();
@@ -130,12 +141,13 @@ mod tests {
             .expect("insert usage event");
 
         // Run stats with no filter — should print the openai row.
-        let cmd = StatsCommand { provider: None };
+        let cmd = StatsCommand { provider: None, json: false };
         run_stats_command(cmd).await.expect("stats should succeed");
 
         // Run stats with a provider filter that matches.
         let cmd = StatsCommand {
             provider: Some("openai".to_string()),
+            json: false,
         };
         run_stats_command(cmd)
             .await
@@ -144,6 +156,7 @@ mod tests {
         // Run stats with a provider filter that does NOT match — should produce no output.
         let cmd = StatsCommand {
             provider: Some("anthropic".to_string()),
+            json: false,
         };
         run_stats_command(cmd)
             .await
