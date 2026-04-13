@@ -2,7 +2,7 @@ use chrono::Utc;
 use tempfile::TempDir;
 use uuid::Uuid;
 use vault_core::models::{AccessMode, Credential, CredentialKind, Profile, ProfileBinding, UsageEvent};
-use vault_db::Store;
+use vault_db::{ProviderStats, Store};
 
 fn sample_credential(provider: &str, label: &str) -> Credential {
     let now = Utc::now();
@@ -268,6 +268,45 @@ async fn insert_usage_event_should_be_queryable() {
     assert!(events[0].success);
     assert_eq!(events[0].latency_ms, 450);
     assert!(events[0].error_text.is_none());
+}
+
+#[tokio::test]
+async fn usage_stats_by_provider_should_aggregate_events() {
+    let test_store = temp_store().await;
+    let credential = sample_credential("openai", "stats-test");
+
+    test_store
+        .store
+        .insert_credential(&credential)
+        .await
+        .expect("insert credential");
+
+    for _ in 0..3 {
+        let event = UsageEvent {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            total_tokens: Some(150),
+            estimated_cost_usd: Some(0.01),
+            ..sample_usage_event(credential.id)
+        };
+        test_store
+            .store
+            .insert_usage_event(&event)
+            .await
+            .expect("insert usage event");
+    }
+
+    let stats: Vec<ProviderStats> = test_store
+        .store
+        .usage_stats_by_provider()
+        .await
+        .expect("usage stats by provider");
+
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0].provider, "openai");
+    assert_eq!(stats[0].request_count, 3);
+    assert_eq!(stats[0].prompt_tokens, 300);
+    assert_eq!(stats[0].completion_tokens, 150);
 }
 
 #[tokio::test]

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::Row;
 use uuid::Uuid;
 use vault_core::models::UsageEvent;
@@ -7,6 +7,17 @@ use crate::{
     codec::{access_mode_as_str, parse_access_mode, parse_timestamp},
     store::Store,
 };
+
+#[derive(Debug, Clone)]
+pub struct ProviderStats {
+    pub provider: String,
+    pub request_count: i64,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: f64,
+    pub last_used_at: String,
+}
 
 impl Store {
     pub async fn insert_usage_event(&self, event: &UsageEvent) -> Result<()> {
@@ -50,6 +61,38 @@ impl Store {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn usage_stats_by_provider(&self) -> Result<Vec<ProviderStats>> {
+        let rows = sqlx::query(
+            "SELECT provider, \
+             SUM(request_count) as request_count, \
+             COALESCE(SUM(prompt_tokens), 0) as prompt_tokens, \
+             COALESCE(SUM(completion_tokens), 0) as completion_tokens, \
+             COALESCE(SUM(total_tokens), 0) as total_tokens, \
+             COALESCE(SUM(estimated_cost_usd), 0.0) as estimated_cost_usd, \
+             MAX(created_at) as last_used_at \
+             FROM usage_events \
+             GROUP BY provider \
+             ORDER BY request_count DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to query usage stats by provider")?;
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(ProviderStats {
+                    provider: row.get("provider"),
+                    request_count: row.get("request_count"),
+                    prompt_tokens: row.get("prompt_tokens"),
+                    completion_tokens: row.get("completion_tokens"),
+                    total_tokens: row.get("total_tokens"),
+                    estimated_cost_usd: row.get("estimated_cost_usd"),
+                    last_used_at: row.get("last_used_at"),
+                })
+            })
+            .collect()
     }
 
     pub async fn list_usage_events(&self, limit: i64) -> Result<Vec<UsageEvent>> {

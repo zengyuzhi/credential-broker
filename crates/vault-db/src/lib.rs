@@ -10,3 +10,4 @@ pub mod usage_events;
 pub const DEVELOPMENT_DATABASE_URL: &str = "sqlite:.local/vault.db";
 
 pub use store::Store;
+pub use usage_events::ProviderStats;
