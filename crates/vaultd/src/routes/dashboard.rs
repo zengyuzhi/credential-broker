@@ -1,14 +1,15 @@
-//! Dashboard home page handler.
+//! Dashboard home and credentials page handlers.
 
 use askama::Template;
 use axum::{
-    extract::State,
-    http::StatusCode,
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
 };
+use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::AuthSession;
+use crate::auth::{validate_csrf, AuthSession};
 
 #[derive(Template)]
 #[template(path = "home.html")]
@@ -100,4 +101,115 @@ pub async fn home_page(_auth: AuthSession, State(state): State<AppState>) -> Res
         )
             .into_response(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Credentials page
+// ---------------------------------------------------------------------------
+
+#[derive(Template)]
+#[template(path = "credentials.html")]
+pub struct CredentialsTemplate {
+    pub credentials: Vec<vault_core::models::Credential>,
+    pub csrf_token: String,
+}
+
+#[derive(Template)]
+#[template(path = "credential_row.html")]
+pub struct CredentialRowTemplate {
+    pub credential: vault_core::models::Credential,
+}
+
+/// `GET /credentials` — credentials list page (requires active session).
+pub async fn credentials_page(auth: AuthSession, State(state): State<AppState>) -> Response {
+    let store = &state.store;
+
+    let credentials = match store.list_credentials().await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::error!("failed to list credentials: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load credentials".to_string(),
+            )
+                .into_response();
+        }
+    };
+
+    let csrf_token = auth.session.csrf_token.clone().unwrap_or_default();
+    let tmpl = CredentialsTemplate {
+        credentials,
+        csrf_token,
+    };
+
+    match tmpl.render() {
+        Ok(html) => Html(html).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("template error: {err}"),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /api/credentials/:id/toggle` — enable/disable a credential (htmx partial response).
+pub async fn toggle_credential(
+    auth: AuthSession,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, (StatusCode, String)> {
+    validate_csrf(&headers, &auth.session)?;
+
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, format!("invalid credential id: {id}")))?;
+
+    let store = &state.store;
+
+    let credential = store
+        .get_credential(uuid)
+        .await
+        .map_err(|err| {
+            tracing::error!("failed to fetch credential {uuid}: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load credential".to_string(),
+            )
+        })?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("credential {id} not found")))?;
+
+    store
+        .set_credential_enabled(uuid, !credential.enabled)
+        .await
+        .map_err(|err| {
+            tracing::error!("failed to toggle credential {uuid}: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to update credential".to_string(),
+            )
+        })?;
+
+    // Reload updated credential to reflect new state in the partial.
+    let updated = store
+        .get_credential(uuid)
+        .await
+        .map_err(|err| {
+            tracing::error!("failed to reload credential {uuid}: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to reload credential".to_string(),
+            )
+        })?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("credential {id} not found after toggle")))?;
+
+    let tmpl = CredentialRowTemplate { credential: updated };
+
+    tmpl.render()
+        .map(|html| Html(html).into_response())
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("template error: {err}"),
+            )
+        })
 }

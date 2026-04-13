@@ -23,5 +23,11 @@ pub fn router(state: AppState) -> Router {
         // Dashboard HTML pages.
         .route("/login", get(login_page))
         .route("/", get(dashboard::home_page))
+        .route("/credentials", get(dashboard::credentials_page))
+        // API endpoints — session + CSRF protected.
+        .route(
+            "/api/credentials/{id}/toggle",
+            post(dashboard::toggle_credential),
+        )
         .with_state(state)
 }
