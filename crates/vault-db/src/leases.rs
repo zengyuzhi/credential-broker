@@ -52,6 +52,15 @@ impl Store {
 
         row.map(map_lease_row).transpose()
     }
+
+    pub async fn count_active_leases(&self) -> Result<i64> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM leases WHERE expires_at > datetime('now')",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count)
+    }
 }
 
 fn map_lease_row(row: sqlx::sqlite::SqliteRow) -> Result<Lease> {

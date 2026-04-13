@@ -1,3 +1,4 @@
+pub mod dashboard;
 pub mod health;
 pub mod proxy;
 pub mod stats;
@@ -21,5 +22,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/login", post(login_handler))
         // Dashboard HTML pages.
         .route("/login", get(login_page))
+        .route("/", get(dashboard::home_page))
         .with_state(state)
 }
