@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::support::prompt::print_success;
 
+const DEFAULT_PORT: u16 = 8765;
 const VAULTD_BASE: &str = "http://127.0.0.1:8765";
 
 #[derive(Debug, Args)]
@@ -17,19 +18,23 @@ struct ChallengeResponse {
 }
 
 pub async fn run_ui_command(_cmd: UiCommand) -> anyhow::Result<()> {
-    // 1. Check daemon is running via /health
     let client = reqwest::Client::new();
     let health_url = format!("{VAULTD_BASE}/health");
 
-    let health_result = client.get(&health_url).send().await;
-    match health_result {
-        Ok(resp) if resp.status().is_success() => {}
-        Ok(resp) => bail!("vaultd returned unexpected status: {}", resp.status()),
-        Err(err) => {
+    // Check if daemon is running; auto-start if not.
+    let is_running = client
+        .get(&health_url)
+        .send()
+        .await
+        .map(|resp| resp.status().is_success())
+        .unwrap_or(false);
+
+    if !is_running {
+        let pid = crate::commands::serve::spawn_background_server(DEFAULT_PORT)?;
+        eprintln!("Started vault server in background (pid: {pid})");
+        if !crate::commands::serve::wait_for_health(DEFAULT_PORT, 5).await {
             bail!(
-                "Cannot reach vaultd at {VAULTD_BASE}.\n\
-                 Make sure the daemon is running: cargo run -p vaultd\n\
-                 Underlying error: {err}"
+                "Could not start vault server. Check port {DEFAULT_PORT} or run `vault serve` manually."
             );
         }
     }
