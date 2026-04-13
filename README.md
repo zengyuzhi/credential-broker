@@ -12,6 +12,22 @@ Coding agents (Codex, Claude Code, Cursor, etc.) need API keys to call LLMs, sea
 - **Tracking every request** with provider, model, token count, and cost estimates
 - **Web dashboard** for real-time monitoring with PIN-based auth and live updates
 
+## Installation
+
+**One-liner** (macOS only):
+```bash
+curl -fsSL https://raw.githubusercontent.com/zengyuzhi/credential-broker/main/install.sh | bash
+```
+
+**From source** (requires Rust toolchain):
+```bash
+cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
+```
+
+**Manual download**: grab the binary from [GitHub Releases](https://github.com/zengyuzhi/credential-broker/releases) for your architecture (Apple Silicon or Intel).
+
+> **Note**: This project's binary is named `vault`. It is unrelated to HashiCorp Vault — this is a local-only credential broker for coding agents.
+
 ## Quick Start
 
 ```bash
