@@ -70,11 +70,9 @@ impl MacOsKeychainStore {
     /// can read the item without triggering a user-interaction prompt. The item is
     /// created or updated (`-U` flag) atomically by the system tool.
     ///
-    /// **Note:** The secret is passed via the `-w` CLI argument because macOS `security
-    /// add-generic-password` does not support reading from stdin. This means the secret
-    /// is briefly visible in process listings. This is acceptable for a local single-user
-    /// tool but should be replaced with direct Security.framework API calls if the threat
-    /// model changes.
+    /// The secret is piped via stdin by placing `-w` as the final argument with no
+    /// value, which causes `security` to read the password from stdin rather than
+    /// accepting it as a CLI argument visible in process listings.
     ///
     /// The `secret_ref` returned follows the existing `"service:account"` convention.
     pub async fn put_with_access(
@@ -86,42 +84,49 @@ impl MacOsKeychainStore {
     ) -> anyhow::Result<String> {
         let opts = generic_password_options_with_trusted_apps(service, account, trusted_apps)?;
 
-        // Build the `security add-generic-password` command with trusted-app flags.
-        // Use tokio::process::Command to avoid blocking the async runtime.
-        let mut cmd = tokio::process::Command::new("security");
+        // Use the absolute path to avoid PATH-based hijacking on the secret-ingest path.
+        let mut cmd = tokio::process::Command::new("/usr/bin/security");
         cmd.arg("add-generic-password")
             .arg("-s")
             .arg(&opts.service)
             .arg("-a")
             .arg(&opts.account)
-            .arg("-w")
-            .arg(secret)
-            .arg("-U") // update if already exists
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .arg("-U"); // update if already exists
 
         for app_path in &opts.trusted_apps {
             cmd.arg("-T").arg(app_path);
         }
 
+        // Place `-w` last with no value so `security` reads the password from stdin,
+        // keeping the secret out of process argument lists.
+        cmd.arg("-w");
+
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
         let mut child = cmd
             .spawn()
-            .context("failed to spawn `security add-generic-password`")?;
+            .context("failed to spawn `/usr/bin/security add-generic-password`")?;
 
-        // Close stdin immediately — the secret is passed via -w flag.
+        // Write the secret to stdin then close it so `security` proceeds.
         if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(secret.as_bytes()).await.context(
+                "failed to write secret to security stdin",
+            )?;
             stdin.shutdown().await.ok();
         }
 
         let output = child
             .wait_with_output()
             .await
-            .context("failed to wait for `security add-generic-password`")?;
+            .context("failed to wait for `/usr/bin/security add-generic-password`")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("security add-generic-password failed for {service}/{account}: {stderr}");
+            anyhow::bail!(
+                "security add-generic-password failed for {service}/{account}: {stderr}"
+            );
         }
 
         Ok(format!("{service}:{account}"))

@@ -50,9 +50,12 @@ pub(crate) fn explain_keychain_read_error(message: &str) -> String {
         .any(|kw| lower.contains(&kw.to_lowercase()));
 
     if is_auth_error {
+        let exe_hint = std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "the current vault-cli binary".to_string());
         format!(
             "Keychain access for this credential is not authorized for the current vault-cli binary.\n\
-             Re-add the credential with the updated CLI, or manually allow target/debug/vault-cli \
+             Re-add the credential with the updated CLI, or manually allow {exe_hint} \
              in Keychain Access for this item.\n\
              Use VAULT_TRUSTED_APP_PATHS only for recovery/debugging.\n\
              Underlying cause: {message}"
