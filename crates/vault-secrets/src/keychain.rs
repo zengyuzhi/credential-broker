@@ -1,11 +1,13 @@
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+
 use anyhow::Context;
 use async_trait::async_trait;
 use security_framework::os::macos::keychain::SecKeychain;
 use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
-use std::collections::BTreeSet;
-use std::path::PathBuf;
+use tokio::io::AsyncWriteExt;
 
 use crate::SecretStore;
 
@@ -65,8 +67,11 @@ impl MacOsKeychainStore {
     /// Store a generic password with explicit trusted-application ACL.
     ///
     /// Uses the `security` CLI with `-T appPath` flags so that the listed applications
-    /// can read the item without triggering a user-interaction prompt.  The item is
+    /// can read the item without triggering a user-interaction prompt. The item is
     /// created or updated (`-U` flag) atomically by the system tool.
+    ///
+    /// The secret is piped via stdin (not passed as a CLI argument) to avoid exposing
+    /// it in process listings.
     ///
     /// The `secret_ref` returned follows the existing `"service:account"` convention.
     pub async fn put_with_access(
@@ -79,7 +84,8 @@ impl MacOsKeychainStore {
         let opts = generic_password_options_with_trusted_apps(service, account, trusted_apps)?;
 
         // Build the `security add-generic-password` command with trusted-app flags.
-        let mut cmd = std::process::Command::new("security");
+        // Use tokio::process::Command to avoid blocking the async runtime.
+        let mut cmd = tokio::process::Command::new("security");
         cmd.arg("add-generic-password")
             .arg("-s")
             .arg(&opts.service)
@@ -87,15 +93,28 @@ impl MacOsKeychainStore {
             .arg(&opts.account)
             .arg("-w")
             .arg(secret)
-            .arg("-U"); // update if already exists
+            .arg("-U") // update if already exists
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
         for app_path in &opts.trusted_apps {
             cmd.arg("-T").arg(app_path);
         }
 
-        let output = cmd
-            .output()
-            .with_context(|| "failed to spawn `security add-generic-password`")?;
+        let mut child = cmd
+            .spawn()
+            .context("failed to spawn `security add-generic-password`")?;
+
+        // Close stdin immediately — the secret is passed via -w flag.
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.shutdown().await.ok();
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .context("failed to wait for `security add-generic-password`")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -211,6 +230,21 @@ mod tests {
             2,
             "expected 2 unique paths, got: {:?}",
             opts.trusted_apps
+        );
+    }
+
+    /// `put_with_access` rejects empty trusted_apps before spawning any process.
+    #[tokio::test]
+    async fn put_with_access_rejects_empty_trusted_apps() {
+        let store = MacOsKeychainStore;
+        let result = store
+            .put_with_access("svc", "acct", "secret", &[])
+            .await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("trusted_apps must not be empty"),
+            "unexpected error: {msg}"
         );
     }
 }
