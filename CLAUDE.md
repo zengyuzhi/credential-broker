@@ -22,24 +22,24 @@ This is a local credential broker that lets coding agents and scripts access API
 ```
 vault-cli (binary)          vaultd (binary)
     │                           │
-    ├── vault-policy            ├── (axum routes - stub)
+    ├── vault-policy            ├── vault-policy
     ├── vault-telemetry         │
-    ├── vault-providers         │
-    ├── vault-secrets           │
-    ├── vault-db                │
+    ├── vault-providers         ├── vault-providers
+    ├── vault-secrets           ├── vault-secrets
+    ├── vault-db                ├── vault-db
     └── vault-core ─────────────┘
 ```
 
 ### Crate responsibilities
 
 - **vault-core** — Domain types (`Credential`, `Profile`, `Lease`, `UsageEvent`), the `ProviderAdapter` async trait, and `VaultError`. No internal deps — everything depends on this.
-- **vault-db** — `Store` wraps `SqlitePool`. Sub-modules (`credentials`, `profiles`, `bindings`, `leases`) each implement CRUD. All queries use sqlx macros.
+- **vault-db** — `Store` wraps `SqlitePool`. Sub-modules (`credentials`, `profiles`, `bindings`, `leases`, `usage_events`) each implement CRUD. All queries use manual `map_*_row` functions (not `FromRow` derive).
 - **vault-secrets** — `SecretStore` trait with a macOS Keychain implementation (`security-framework`). Secrets stored under service `ai.zyr1.vault` with ref format `<service>:<credential_id>:<field_name>`.
 - **vault-providers** — `ProviderAdapter` implementations (OpenAI, Anthropic, TwitterAPI). `registry::adapter_for()` returns the right adapter. `schema.rs` has static `ProviderSchema` definitions for 7 providers (only 3 have full adapters).
 - **vault-policy** — Lease issuance (`issue_lease` generates UUID token, blake3-hashes it) and `PolicyService` (blocks prod credentials unless `allow_prod` is set).
-- **vault-telemetry** — `TelemetryWriter` and `StatsSummary` (both stubs currently).
-- **vault-cli** — Clap-derived CLI. Fully working: `credential add/list/enable/disable/remove`, `run --profile <name> -- <cmd>`. Stubs: `profile`, `stats`.
-- **vaultd** — Axum HTTP daemon. Only `GET /health` and `GET /stats/providers` (empty stub) are wired.
+- **vault-telemetry** — `TelemetryWriter` persists `UsageEvent` rows via `Store`. `StatsSummary` struct for rollups.
+- **vault-cli** — Clap-derived CLI. Fully working: `credential add/list/enable/disable/remove`, `profile create/list/show/bind`, `run --profile <name> -- <cmd>`, `stats`. Records launch events via telemetry.
+- **vaultd** — Axum HTTP daemon. Routes: `GET /health`, `GET /stats/providers` (real rollup data), `POST /v1/proxy/{provider}/{*path}` (lease-authenticated upstream forwarding).
 
 ### Key data flow: `vault run`
 
@@ -52,7 +52,7 @@ vault-cli (binary)          vaultd (binary)
 
 ### Access modes
 
-Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd forwards requests), or `Either`. Only Inject is implemented.
+Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd forwards requests), or `Either`. Both Inject and Proxy are implemented.
 
 ## Conventions
 
@@ -61,6 +61,7 @@ Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd
 - Timestamps are ISO 8601 strings in SQLite (`chrono` for serialization)
 - Errors: `VaultError` (thiserror) for domain errors, `anyhow::Result` for plumbing
 - macOS-only for now: `vault-secrets` uses `security-framework` behind `#[cfg(target_os = "macos")]`
+- DB queries: use manual `map_*_row(SqliteRow) -> Result<T>` functions with `sqlx::Row::get()`, NOT `#[derive(FromRow)]`. Codec helpers: `access_mode_as_str()` / `parse_access_mode()`.
 
 ## Gotchas
 
