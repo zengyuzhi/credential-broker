@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-pub mod access;
+mod access;
 pub use access::trusted_application_paths_for;
 
 pub const KEYCHAIN_SERVICE_NAME: &str = "ai.zyr1.vault";

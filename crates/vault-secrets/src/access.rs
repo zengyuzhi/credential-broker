@@ -5,19 +5,35 @@ use std::path::{Path, PathBuf};
 ///
 /// - `current_exe`: the primary executable path (canonicalized when it exists on-disk).
 /// - `env_override`: optional colon-separated list of additional paths (e.g. from the
-///   `VAULT_TRUSTED_APP_PATHS` environment variable).
+///   `VAULT_TRUSTED_APP_PATHS` environment variable). Colon-separated because this is
+///   macOS-only (matching PATH conventions).
 ///
-/// Blank entries in `env_override` are ignored. Duplicates are removed. Paths that exist
-/// on disk are canonicalized; paths that do not exist are kept as-is so callers can still
-/// build the list before the binary is first compiled.
+/// Blank entries in `env_override` are ignored. Duplicates are removed (both raw and
+/// canonicalized forms are stored so dedup works regardless of whether a path exists
+/// on disk at call time). Paths that exist on disk are canonicalized; paths that do not
+/// exist are kept as-is so callers can still build the list before the binary is first
+/// compiled.
 pub fn trusted_application_paths_for(
     current_exe: impl AsRef<Path>,
     env_override: Option<&str>,
-) -> anyhow::Result<Vec<PathBuf>> {
-    let mut set: BTreeSet<PathBuf> = BTreeSet::new();
+) -> Vec<PathBuf> {
+    // Track both raw and canonical forms so the same logical path is never added twice,
+    // regardless of whether it exists on disk at call time.
+    let mut seen_raw: BTreeSet<PathBuf> = BTreeSet::new();
+    let mut seen_canonical: BTreeSet<PathBuf> = BTreeSet::new();
+    let mut result: Vec<PathBuf> = Vec::new();
 
-    let exe = canonicalize_best_effort(current_exe.as_ref());
-    set.insert(exe);
+    let mut insert = |raw: &Path| {
+        let canonical = canonicalize_best_effort(raw);
+        if seen_raw.contains(&raw.to_path_buf()) || seen_canonical.contains(&canonical) {
+            return;
+        }
+        seen_raw.insert(raw.to_path_buf());
+        seen_canonical.insert(canonical.clone());
+        result.push(canonical);
+    };
+
+    insert(current_exe.as_ref());
 
     if let Some(overrides) = env_override {
         for entry in overrides.split(':') {
@@ -25,12 +41,11 @@ pub fn trusted_application_paths_for(
             if trimmed.is_empty() {
                 continue;
             }
-            let p = canonicalize_best_effort(Path::new(trimmed));
-            set.insert(p);
+            insert(Path::new(trimmed));
         }
     }
 
-    Ok(set.into_iter().collect())
+    result
 }
 
 /// Canonicalize a path when possible; return the original path otherwise.
@@ -45,17 +60,17 @@ mod tests {
     /// A direct binary path is preserved (or canonicalized to itself when it exists).
     #[test]
     fn trusted_application_paths_should_include_current_exe() {
+        // Use non-existent paths to avoid filesystem-dependent behavior.
         let paths = trusted_application_paths_for(
-            "/tmp/work/target/debug/vault-cli",
-            Some("/tmp/work/target/debug/vault-cli:/Applications/iTerm.app"),
-        )
-        .unwrap();
+            "/nonexistent/target/debug/vault-cli",
+            Some("/nonexistent/target/debug/vault-cli:/nonexistent/other/bin/tool"),
+        );
 
         assert!(
             paths.iter().any(|p| p.ends_with("target/debug/vault-cli")),
             "expected vault-cli in paths, got: {paths:?}"
         );
-        // vault-cli + iTerm.app (two distinct paths)
+        // vault-cli (deduped from override) + tool = 2 distinct paths
         assert_eq!(paths.len(), 2, "expected exactly 2 paths, got: {paths:?}");
     }
 
@@ -63,10 +78,9 @@ mod tests {
     #[test]
     fn trusted_application_paths_deduplicates() {
         let paths = trusted_application_paths_for(
-            "/tmp/work/target/debug/vault-cli",
-            Some("/tmp/work/target/debug/vault-cli:/tmp/work/target/debug/vault-cli"),
-        )
-        .unwrap();
+            "/nonexistent/target/debug/vault-cli",
+            Some("/nonexistent/target/debug/vault-cli:/nonexistent/target/debug/vault-cli"),
+        );
 
         assert_eq!(paths.len(), 1, "duplicates should be removed, got: {paths:?}");
     }
@@ -75,10 +89,9 @@ mod tests {
     #[test]
     fn trusted_application_paths_ignores_blank_entries() {
         let paths = trusted_application_paths_for(
-            "/tmp/work/target/debug/vault-cli",
-            Some(":/tmp/work/target/debug/vault-cli:  :"),
-        )
-        .unwrap();
+            "/nonexistent/target/debug/vault-cli",
+            Some(":/nonexistent/target/debug/vault-cli:  :"),
+        );
 
         assert_eq!(paths.len(), 1, "blank entries should be ignored, got: {paths:?}");
     }
@@ -87,7 +100,7 @@ mod tests {
     #[test]
     fn trusted_application_paths_without_override() {
         let paths =
-            trusted_application_paths_for("/tmp/work/target/debug/vault-cli", None).unwrap();
+            trusted_application_paths_for("/nonexistent/target/debug/vault-cli", None);
 
         assert_eq!(paths.len(), 1);
         assert!(paths[0].ends_with("target/debug/vault-cli"));
@@ -97,9 +110,21 @@ mod tests {
     #[test]
     fn trusted_application_paths_canonicalizes_existing_paths() {
         // /private/tmp is the canonical form of /tmp on macOS.
-        let paths = trusted_application_paths_for("/tmp", None).unwrap();
-        // Should have been canonicalized (on macOS /tmp → /private/tmp).
-        // On Linux /tmp is already canonical. Either way exactly one path is returned.
+        let paths = trusted_application_paths_for("/tmp", None);
         assert_eq!(paths.len(), 1);
+        // On macOS /tmp → /private/tmp; on Linux /tmp is already canonical.
+        let resolved = &paths[0];
+        assert!(
+            resolved.to_str().unwrap().contains("tmp"),
+            "expected a tmp-related path, got: {resolved:?}"
+        );
+    }
+
+    /// Same logical path provided as raw and canonical form is deduplicated.
+    #[test]
+    fn trusted_application_paths_deduplicates_across_canonical_forms() {
+        // /tmp and /private/tmp are the same path on macOS.
+        let paths = trusted_application_paths_for("/tmp", Some("/private/tmp"));
+        assert_eq!(paths.len(), 1, "canonical duplicates should be removed, got: {paths:?}");
     }
 }
