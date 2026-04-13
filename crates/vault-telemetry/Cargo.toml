@@ -5,5 +5,11 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
+tokio.workspace = true
 vault-core = { path = "../vault-core" }
 vault-db = { path = "../vault-db" }
+
+[dev-dependencies]
+chrono.workspace = true
+tempfile = "3"
+uuid.workspace = true
