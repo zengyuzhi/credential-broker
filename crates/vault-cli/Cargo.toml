@@ -17,6 +17,7 @@ vault-db = { path = "../vault-db" }
 vault-providers = { path = "../vault-providers" }
 vault-policy = { path = "../vault-policy" }
 vault-secrets = { path = "../vault-secrets" }
+vault-telemetry = { path = "../vault-telemetry" }
 
 [dev-dependencies]
 tempfile = "3"

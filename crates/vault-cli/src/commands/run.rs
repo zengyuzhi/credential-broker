@@ -109,6 +109,8 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
         bail!("profile {} has no bindings", cmd.profile);
     }
 
+    // Capture first credential_id for the launch audit event (FK requires a real credential).
+    let first_credential_id = bindings[0].credential_id;
     let resolved = resolve_bound_credentials(&store, bindings).await?;
     debug_log(format!("resolved {} bound credentials", resolved.len()));
     let mut env_map = resolve_env_for_profile(resolved)?;
@@ -148,6 +150,40 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("failed to spawn command: {program}"))?;
     debug_log(format!("child exited with status {}", status));
+
+    // Record a launch usage event for audit and stats.
+    {
+        let telemetry = vault_telemetry::writer::TelemetryWriter::new(store.clone());
+        let launch_event = vault_core::models::UsageEvent {
+            id: uuid::Uuid::new_v4(),
+            provider: "vault".to_string(),
+            credential_id: first_credential_id,
+            lease_id: Some(lease.id),
+            agent_name: cmd.agent.clone(),
+            project: cmd.project.clone(),
+            mode: vault_core::models::AccessMode::Inject,
+            operation: "process_launch".to_string(),
+            endpoint: None,
+            model: None,
+            request_count: 1,
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
+            estimated_cost_usd: None,
+            status_code: status.code().map(|c| c as i64),
+            success: status.success(),
+            latency_ms: 0,
+            error_text: if status.success() {
+                None
+            } else {
+                Some(format!("exit {status}"))
+            },
+            created_at: chrono::Utc::now(),
+        };
+        if let Err(err) = telemetry.write_usage_event(&launch_event).await {
+            debug_log(format!("failed to record launch event: {err}"));
+        }
+    }
 
     if !status.success() {
         bail!("command exited with status {status}");
