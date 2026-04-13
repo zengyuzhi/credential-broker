@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::Row;
 use uuid::Uuid;
 use vault_core::models::Lease;
@@ -36,6 +36,19 @@ impl Store {
         .bind(id.to_string())
         .fetch_optional(&self.pool)
         .await?;
+
+        row.map(map_lease_row).transpose()
+    }
+
+    pub async fn get_lease_by_token_hash(&self, token_hash: &str) -> Result<Option<Lease>> {
+        let row = sqlx::query(
+            "SELECT id, profile_id, agent_name, project, issued_at, expires_at, session_token_hash \
+             FROM leases WHERE session_token_hash = ?",
+        )
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to look up lease by token hash")?;
 
         row.map(map_lease_row).transpose()
     }

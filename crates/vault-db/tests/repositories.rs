@@ -269,3 +269,22 @@ async fn insert_usage_event_should_be_queryable() {
     assert_eq!(events[0].latency_ms, 450);
     assert!(events[0].error_text.is_none());
 }
+
+#[tokio::test]
+async fn get_lease_by_token_hash_should_return_matching_lease() {
+    let ts = temp_store().await;
+
+    let profile = sample_profile("coding");
+    ts.store.insert_profile(&profile).await.unwrap();
+
+    let (lease, _raw_token) = vault_policy::lease::issue_lease(profile.id, "demo", None, 60);
+    ts.store.insert_lease(&lease).await.unwrap();
+
+    let found = ts
+        .store
+        .get_lease_by_token_hash(&lease.session_token_hash)
+        .await
+        .unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().id, lease.id);
+}
