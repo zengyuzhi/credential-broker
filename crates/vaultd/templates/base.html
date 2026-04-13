@@ -16,8 +16,10 @@
         .vault-nav li { padding: 0.25rem 0; }
         .vault-nav a[aria-current="page"] { font-weight: 700; }
         .vault-main { flex: 1; padding: 2rem; }
-        .vault-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+        .vault-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; color: var(--pico-color); }
         .vault-topbar { display: none; }
+        .stat-value { font-size: 2rem; margin: 0; }
+        .btn-sm { padding: 0.25rem 0.75rem; font-size: 0.85rem; }
         @media (max-width: 768px) {
             .vault-layout { flex-direction: column; }
             .vault-nav { display: none; width: 100%; border-right: none; border-bottom: 1px solid var(--pico-muted-border-color); }
@@ -66,19 +68,56 @@
             }
         });
     })();
-    // Connect to SSE and auto-refresh main page content on data changes.
+    // SSE live updates with reconnection.
     (function() {
-        var es = new EventSource('/api/events');
-        ['stats', 'credential', 'lease'].forEach(function(evt) {
-            es.addEventListener(evt, function() {
-                htmx.ajax('GET', window.location.pathname, {target: 'main', swap: 'innerHTML'});
+        var retries = 0;
+        var maxRetries = 5;
+        var banner = null;
+
+        function showBanner(msg) {
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'sse-banner';
+                banner.setAttribute('role', 'status');
+                banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;padding:0.5rem;text-align:center;font-size:0.85rem;background:var(--pico-del-color);color:#fff;z-index:999;';
+                document.body.appendChild(banner);
+            }
+            banner.textContent = msg;
+            banner.style.display = '';
+        }
+
+        function hideBanner() {
+            if (banner) banner.style.display = 'none';
+        }
+
+        function connect() {
+            var es = new EventSource('/api/events');
+
+            es.onopen = function() {
+                retries = 0;
+                hideBanner();
+            };
+
+            ['stats', 'credential', 'lease'].forEach(function(evt) {
+                es.addEventListener(evt, function() {
+                    htmx.ajax('GET', window.location.pathname, {target: 'main', swap: 'innerHTML'});
+                });
             });
-        });
-        es.onerror = function() {
-            // Silently close on auth loss (e.g. session expired); page reload
-            // will redirect to /login via the server.
-            es.close();
-        };
+
+            es.onerror = function() {
+                es.close();
+                retries++;
+                if (retries <= maxRetries) {
+                    var delay = Math.min(2000 * Math.pow(2, retries - 1), 30000);
+                    showBanner('Live updates disconnected. Reconnecting...');
+                    setTimeout(connect, delay);
+                } else {
+                    showBanner('Live updates offline. Reload page to reconnect.');
+                }
+            };
+        }
+
+        connect();
     })();
     </script>
 </body>

@@ -15,8 +15,8 @@
                 <p>Enter the 6-digit PIN displayed in your terminal.</p>
             </header>
 
-            <div id="login-error" style="display: none;" role="alert">
-                <p style="color: var(--pico-del-color);">Invalid PIN. Please try again.</p>
+            <div id="login-error" style="display: none;" role="alert" aria-live="assertive">
+                <p id="login-error-text" style="color: var(--pico-del-color);">Invalid PIN. Please try again.</p>
             </div>
 
             <form
@@ -57,13 +57,28 @@
         function handleLoginResponse(event) {
             var xhr = event.detail.xhr;
             if (xhr.status === 200) {
-                // Redirect to dashboard on success.
                 window.location.href = '/';
+                return;
+            }
+            var errDiv = document.getElementById('login-error');
+            var errText = document.getElementById('login-error-text');
+            if (!errDiv) return;
+            errDiv.style.display = '';
+            // Show server error message when available.
+            var msg = '';
+            try { msg = xhr.responseText || ''; } catch(e) {}
+            if (xhr.status === 410) {
+                errText.textContent = 'Challenge expired. Run vault ui again.';
+            } else if (xhr.status === 429) {
+                errText.textContent = 'Too many attempts. Run vault ui again.';
+            } else if (xhr.status === 409) {
+                errText.textContent = 'Challenge already used. Run vault ui again.';
+            } else if (xhr.status === 401) {
+                errText.textContent = 'Incorrect PIN. Please try again.';
+            } else if (msg) {
+                errText.textContent = msg;
             } else {
-                var errDiv = document.getElementById('login-error');
-                if (errDiv) {
-                    errDiv.style.display = '';
-                }
+                errText.textContent = 'Login failed. Please try again.';
             }
         }
     </script>
