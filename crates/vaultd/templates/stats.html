@@ -5,7 +5,7 @@
 
 <form>
     <fieldset role="group">
-        <select name="provider"
+        <select name="provider" aria-label="Filter by provider"
                 hx-get="/stats"
                 hx-target="#stats-content"
                 hx-swap="innerHTML"
@@ -28,13 +28,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>Provider</th>
-                    <th>Requests</th>
-                    <th>Prompt Tokens</th>
-                    <th>Completion Tokens</th>
-                    <th>Total Tokens</th>
-                    <th>Est. Cost (USD)</th>
-                    <th>Last Used</th>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Requests</th>
+                    <th scope="col" class="hide-mobile">Prompt Tokens</th>
+                    <th scope="col" class="hide-mobile">Completion Tokens</th>
+                    <th scope="col">Total Tokens</th>
+                    <th scope="col">Est. Cost (USD)</th>
+                    <th scope="col" class="hide-mobile">Last Used</th>
                 </tr>
             </thead>
             <tbody>
@@ -42,11 +42,11 @@
                 <tr>
                     <td>{{ stat.provider }}</td>
                     <td>{{ stat.request_count }}</td>
-                    <td>{{ stat.prompt_tokens }}</td>
-                    <td>{{ stat.completion_tokens }}</td>
+                    <td class="hide-mobile">{{ stat.prompt_tokens }}</td>
+                    <td class="hide-mobile">{{ stat.completion_tokens }}</td>
                     <td>{{ stat.total_tokens }}</td>
                     <td>${{ stat.estimated_cost_usd }}</td>
-                    <td>{{ stat.last_used_at }}</td>
+                    <td class="hide-mobile">{{ stat.last_used_at }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -62,24 +62,24 @@
         <table>
             <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>Provider</th>
-                    <th>Agent</th>
-                    <th>Operation</th>
-                    <th>Model</th>
-                    <th>Tokens</th>
-                    <th>Status</th>
+                    <th scope="col" class="hide-mobile">Time</th>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Agent</th>
+                    <th scope="col">Operation</th>
+                    <th scope="col" class="hide-mobile">Model</th>
+                    <th scope="col" class="hide-mobile">Tokens</th>
+                    <th scope="col">Status</th>
                 </tr>
             </thead>
             <tbody>
                 {% for event in recent_events %}
                 <tr>
-                    <td>{{ event.created_at }}</td>
+                    <td class="hide-mobile">{{ event.created_at }}</td>
                     <td>{{ event.provider }}</td>
                     <td>{{ event.agent_name }}</td>
                     <td>{{ event.operation }}</td>
-                    <td>{% match event.model %}{% when Some with (m) %}{{ m }}{% when None %}—{% endmatch %}</td>
-                    <td>{% match event.total_tokens %}{% when Some with (t) %}{{ t }}{% when None %}—{% endmatch %}</td>
+                    <td class="hide-mobile">{% match event.model %}{% when Some with (m) %}{{ m }}{% when None %}—{% endmatch %}</td>
+                    <td class="hide-mobile">{% match event.total_tokens %}{% when Some with (t) %}{{ t }}{% when None %}—{% endmatch %}</td>
                     <td>{% if event.success %}&#10003;{% else %}&#10007;{% endif %}</td>
                 </tr>
                 {% endfor %}

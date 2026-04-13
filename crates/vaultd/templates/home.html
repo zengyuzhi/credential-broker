@@ -29,11 +29,11 @@
     <table>
         <thead>
             <tr>
-                <th>Provider</th>
-                <th>Requests</th>
-                <th>Tokens</th>
-                <th>Est. Cost (USD)</th>
-                <th>Last Used</th>
+                <th scope="col">Provider</th>
+                <th scope="col">Requests</th>
+                <th scope="col">Tokens</th>
+                <th scope="col" class="hide-mobile">Est. Cost (USD)</th>
+                <th scope="col" class="hide-mobile">Last Used</th>
             </tr>
         </thead>
         <tbody>
@@ -42,8 +42,8 @@
                 <td>{{ stat.provider }}</td>
                 <td>{{ stat.request_count }}</td>
                 <td>{{ stat.total_tokens }}</td>
-                <td>${{ stat.estimated_cost_usd }}</td>
-                <td>{{ stat.last_used_at }}</td>
+                <td class="hide-mobile">${{ stat.estimated_cost_usd }}</td>
+                <td class="hide-mobile">{{ stat.last_used_at }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -59,17 +59,17 @@
     <table>
         <thead>
             <tr>
-                <th>Time</th>
-                <th>Provider</th>
-                <th>Agent</th>
-                <th>Operation</th>
-                <th>Status</th>
+                <th scope="col" class="hide-mobile">Time</th>
+                <th scope="col">Provider</th>
+                <th scope="col">Agent</th>
+                <th scope="col">Operation</th>
+                <th scope="col">Status</th>
             </tr>
         </thead>
         <tbody>
             {% for event in recent_events %}
             <tr>
-                <td>{{ event.created_at }}</td>
+                <td class="hide-mobile">{{ event.created_at }}</td>
                 <td>{{ event.provider }}</td>
                 <td>{{ event.agent_name }}</td>
                 <td>{{ event.operation }}</td>

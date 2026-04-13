@@ -11,20 +11,20 @@
     <table>
         <thead>
             <tr>
-                <th>Agent</th>
-                <th>Profile ID</th>
-                <th>Project</th>
-                <th>Issued At</th>
-                <th>Expires At</th>
+                <th scope="col">Agent</th>
+                <th scope="col" class="hide-mobile">Profile ID</th>
+                <th scope="col">Project</th>
+                <th scope="col" class="hide-mobile">Issued At</th>
+                <th scope="col">Expires At</th>
             </tr>
         </thead>
         <tbody>
             {% for lease in active_leases %}
             <tr>
                 <td>{{ lease.agent_name }}</td>
-                <td><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
+                <td class="hide-mobile"><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
                 <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
-                <td>{{ lease.issued_at }}</td>
+                <td class="hide-mobile">{{ lease.issued_at }}</td>
                 <td>{{ lease.expires_at }}</td>
             </tr>
             {% endfor %}
@@ -41,20 +41,20 @@
     <table>
         <thead>
             <tr>
-                <th>Agent</th>
-                <th>Profile ID</th>
-                <th>Project</th>
-                <th>Issued At</th>
-                <th>Expires At</th>
+                <th scope="col">Agent</th>
+                <th scope="col" class="hide-mobile">Profile ID</th>
+                <th scope="col">Project</th>
+                <th scope="col" class="hide-mobile">Issued At</th>
+                <th scope="col">Expires At</th>
             </tr>
         </thead>
         <tbody>
             {% for lease in expired_leases %}
             <tr>
                 <td>{{ lease.agent_name }}</td>
-                <td><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
+                <td class="hide-mobile"><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
                 <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
-                <td>{{ lease.issued_at }}</td>
+                <td class="hide-mobile">{{ lease.issued_at }}</td>
                 <td>{{ lease.expires_at }}</td>
             </tr>
             {% endfor %}

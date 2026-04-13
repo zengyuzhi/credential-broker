@@ -6,11 +6,41 @@
     <title>{% block title %}Vault{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+        .vault-layout { display: flex; min-height: 100vh; }
+        .vault-nav {
+            width: 200px; padding: 1rem;
+            border-right: 1px solid var(--pico-muted-border-color);
+        }
+        .vault-nav ul { margin: 0; padding: 0; list-style: none; }
+        .vault-nav li { padding: 0.25rem 0; }
+        .vault-nav a[aria-current="page"] { font-weight: 700; }
+        .vault-main { flex: 1; padding: 2rem; }
+        .vault-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+        .vault-topbar { display: none; }
+        @media (max-width: 768px) {
+            .vault-layout { flex-direction: column; }
+            .vault-nav { display: none; width: 100%; border-right: none; border-bottom: 1px solid var(--pico-muted-border-color); }
+            .vault-nav.open { display: block; }
+            .vault-topbar {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 0.5rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color);
+            }
+            .vault-toggle { display: inline-block; }
+            .vault-main { padding: 1rem; }
+            table { font-size: 0.85rem; }
+            .hide-mobile { display: none; }
+        }
+    </style>
     {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <div style="display: flex; min-height: 100vh;">
-        <nav style="width: 200px; padding: 1rem; border-right: 1px solid var(--pico-muted-border-color);">
+    <div class="vault-topbar">
+        <strong>Vault</strong>
+        <button class="vault-toggle" aria-label="Toggle navigation" onclick="document.querySelector('.vault-nav').classList.toggle('open')">&#9776;</button>
+    </div>
+    <div class="vault-layout">
+        <nav class="vault-nav" aria-label="Main navigation">
             <ul>
                 <li><strong>Vault</strong></li>
             </ul>
@@ -22,11 +52,20 @@
                 <li><a href="/sessions">Sessions</a></li>
             </ul>
         </nav>
-        <main class="container" style="flex: 1; padding: 2rem;">
+        <main class="vault-main container">
             {% block content %}{% endblock %}
         </main>
     </div>
     <script>
+    // Mark active nav link based on current path.
+    (function() {
+        var path = window.location.pathname;
+        document.querySelectorAll('.vault-nav a').forEach(function(a) {
+            if (a.getAttribute('href') === path) {
+                a.setAttribute('aria-current', 'page');
+            }
+        });
+    })();
     // Connect to SSE and auto-refresh main page content on data changes.
     (function() {
         var es = new EventSource('/api/events');
