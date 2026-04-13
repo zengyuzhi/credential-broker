@@ -59,6 +59,15 @@ vault-cli (binary)          vaultd (binary)
 
 Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd forwards requests), or `Either`. Both Inject and Proxy are implemented.
 
+### Web dashboard
+
+Served by vaultd (embedded in vault-cli via `vault serve`). Stack: askama templates + Pico CSS + htmx (CDN). No npm/node.
+- Auth: daemon-owned PIN challenges (blake3 hashed, 5-attempt burn, 5-min expiry, 3/min rate limit)
+- CSRF: per-session token in `<meta>` tag, sent via `htmx:configRequest` header
+- SSE: SQLite polling every 2s at `GET /api/events` for cross-process change detection
+- Templates: `crates/vaultd/templates/*.html` — use `tmpl.render()` match pattern, NOT `IntoResponse` trait
+- Background: `vault serve --background` re-execs with `process_group(0)`, PID file at `.local/vault.pid`
+
 ## Conventions
 
 - Rust edition 2024, stable toolchain
@@ -70,6 +79,9 @@ Credentials bind to profiles with a `mode`: `Inject` (env vars), `Proxy` (vaultd
 
 ## Gotchas
 
+- `askama_axum` 0.4 `IntoResponse` impl is incompatible with axum 0.8 — always use manual `tmpl.render()` → `Html(html).into_response()`.
+- Background process detach on macOS: use `cmd.process_group(0)` (`std::os::unix::process::CommandExt`).
+- PID file at `.local/vault.pid` — always check for stale PIDs (process dead but file exists).
 - `security-framework` v3 does NOT bind Keychain ACL APIs (`SecAccessCreate`, `SecTrustedApplicationCreateFromPath`). Trusted-app ACLs use `/usr/bin/security` CLI — always absolute path, never bare `security`.
 - macOS `security add-generic-password`: place `-w` as the **last** argument with no value to read the password from stdin (avoids process-list exposure).
 - `MacOsKeychainStore` is a unit struct — construct with `MacOsKeychainStore`, not `MacOsKeychainStore::default()` (clippy `default_constructed_unit_structs`).
