@@ -27,6 +27,41 @@ fn debug_log(message: impl AsRef<str>) {
     }
 }
 
+/// Keywords in Keychain error messages that indicate an authorization/ACL failure.
+const AUTH_ERROR_KEYWORDS: &[&str] = &[
+    "User interaction is not allowed",
+    "errAuthorizationDenied",
+    "ACL add application",
+    "errSecAuthFailed",
+    "authorization denied",
+    "not authorized",
+    "access control",
+];
+
+/// Translate a raw Keychain error message into an actionable recovery message.
+///
+/// When the underlying error looks like an authorization/ACL problem, the returned
+/// string explains concrete recovery steps.  For all other errors the original message
+/// is returned unchanged so callers can still see the low-level cause.
+pub(crate) fn explain_keychain_read_error(message: &str) -> String {
+    let lower = message.to_lowercase();
+    let is_auth_error = AUTH_ERROR_KEYWORDS
+        .iter()
+        .any(|kw| lower.contains(&kw.to_lowercase()));
+
+    if is_auth_error {
+        format!(
+            "Keychain access for this credential is not authorized for the current vault-cli binary.\n\
+             Re-add the credential with the updated CLI, or manually allow target/debug/vault-cli \
+             in Keychain Access for this item.\n\
+             Use VAULT_TRUSTED_APP_PATHS only for recovery/debugging.\n\
+             Underlying cause: {message}"
+        )
+    } else {
+        message.to_string()
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct RunCommand {
     #[arg(long)]
@@ -153,11 +188,21 @@ async fn resolve_bound_credentials(
                 "reading macOS keychain service={} account={}",
                 KEYCHAIN_SERVICE_NAME, account
             ));
-            let value = keychain.get(KEYCHAIN_SERVICE_NAME, &account).await?;
+            let value = keychain
+                .get(KEYCHAIN_SERVICE_NAME, &account)
+                .await
+                .map_err(|err| {
+                    let raw = err.to_string();
+                    let enhanced = explain_keychain_read_error(&raw);
+                    if enhanced != raw {
+                        anyhow::anyhow!("{}", enhanced)
+                    } else {
+                        err
+                    }
+                })?;
             debug_log(format!(
-                "loaded keychain secret for credential_id={} (len={})",
+                "loaded keychain secret for credential_id={}",
                 credential.id,
-                value.len()
             ));
             value
         };
@@ -229,7 +274,57 @@ mod tests {
 
     use vault_core::{models::AccessMode, provider::ResolvedCredential};
 
-    use super::resolve_env_for_profile;
+    use super::{explain_keychain_read_error, resolve_env_for_profile};
+
+    // --- explain_keychain_read_error tests ---
+
+    #[test]
+    fn explain_keychain_read_error_auth_failure_mentions_re_add() {
+        let msg = explain_keychain_read_error("User interaction is not allowed");
+        assert!(
+            msg.contains("re-add") || msg.contains("Re-add"),
+            "expected re-add guidance, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn explain_keychain_read_error_auth_failure_mentions_binary_path() {
+        let msg = explain_keychain_read_error("errAuthorizationDenied");
+        assert!(
+            msg.contains("vault-cli"),
+            "expected vault-cli binary mention, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn explain_keychain_read_error_auth_failure_mentions_trusted_app_paths() {
+        let msg = explain_keychain_read_error("ACL add application");
+        assert!(
+            msg.contains("VAULT_TRUSTED_APP_PATHS"),
+            "expected VAULT_TRUSTED_APP_PATHS mention, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn explain_keychain_read_error_non_auth_error_passes_through() {
+        let original = "The specified item could not be found in the keychain";
+        let msg = explain_keychain_read_error(original);
+        // Non-auth errors should still contain the original message
+        assert!(
+            msg.contains(original),
+            "expected original message preserved, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn explain_keychain_read_error_auth_failure_preserves_original_cause() {
+        let original = "User interaction is not allowed";
+        let msg = explain_keychain_read_error(original);
+        assert!(
+            msg.contains(original),
+            "expected original cause preserved in output, got: {msg}"
+        );
+    }
 
     #[test]
     fn resolve_env_for_profile_should_map_bound_provider_keys() {

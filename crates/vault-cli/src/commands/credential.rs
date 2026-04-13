@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, bail};
 use chrono::Utc;
 use clap::{Args, Subcommand};
@@ -87,8 +89,12 @@ async fn add_credential(
     let secret_ref = {
         let keychain = vault_secrets::MacOsKeychainStore::default();
         let account = build_keychain_account(credential_id, field_name);
+        let current_exe = std::env::current_exe()?;
+        let env_override = std::env::var("VAULT_TRUSTED_APP_PATHS").ok();
+        let trusted_apps =
+            keychain_account_and_access_targets(credential_id, field_name, &current_exe, env_override.as_deref())?.1;
         keychain
-            .put(KEYCHAIN_SERVICE_NAME, &account, &secret_value)
+            .put_with_access(KEYCHAIN_SERVICE_NAME, &account, &secret_value, &trusted_apps)
             .await?
     };
 
@@ -211,6 +217,34 @@ fn build_keychain_account(credential_id: Uuid, field_name: &str) -> String {
     format!("credential:{credential_id}:{field_name}")
 }
 
+/// Compute the Keychain account string and the list of trusted application paths for a
+/// given credential field.
+///
+/// Extracted as a pure helper so it can be unit-tested without touching the live Keychain.
+///
+/// # Parameters
+/// - `credential_id` – UUID of the credential being stored.
+/// - `field_name`    – schema field being stored (e.g. `"api_key"`).
+/// - `current_exe`   – path to the running executable (used as the primary trusted app).
+/// - `env_override`  – optional value of `VAULT_TRUSTED_APP_PATHS` (colon-separated).
+///
+/// # Returns
+/// A tuple `(account, trusted_paths)`.
+fn keychain_account_and_access_targets(
+    credential_id: Uuid,
+    field_name: &str,
+    current_exe: &Path,
+    env_override: Option<&str>,
+) -> anyhow::Result<(String, Vec<PathBuf>)> {
+    let account = build_keychain_account(credential_id, field_name);
+    let trusted_apps = vault_secrets::trusted_application_paths_for(current_exe, env_override);
+    anyhow::ensure!(
+        !trusted_apps.is_empty(),
+        "could not resolve any trusted application paths for Keychain ACL"
+    );
+    Ok((account, trusted_apps))
+}
+
 fn parse_secret_ref(secret_ref: &str) -> anyhow::Result<(String, String)> {
     let (service, account) = secret_ref
         .split_once(':')
@@ -227,7 +261,8 @@ mod tests {
     use vault_db::Store;
 
     use super::{
-        build_keychain_account, parse_credential_kind, parse_secret_ref, set_credential_enabled,
+        build_keychain_account, keychain_account_and_access_targets, parse_credential_kind,
+        parse_secret_ref, set_credential_enabled,
     };
     use crate::support::config::{
         clear_test_database_url, current_database_url, set_test_database_url, test_database_lock,
@@ -247,6 +282,53 @@ mod tests {
         assert_eq!(
             account,
             "credential:123e4567-e89b-12d3-a456-426614174000:api_key"
+        );
+    }
+
+    /// `keychain_account_and_access_targets` returns the correct account string and a
+    /// non-empty trusted-path list that includes the supplied exe path.
+    #[test]
+    fn keychain_account_and_access_targets_returns_correct_account_and_paths() {
+        use std::path::Path;
+        let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").expect("uuid");
+        let fake_exe = Path::new("/nonexistent/target/debug/vault-cli");
+
+        let (account, paths) =
+            keychain_account_and_access_targets(id, "api_key", fake_exe, None)
+                .expect("helper should succeed");
+
+        // Account must follow the established convention.
+        assert_eq!(
+            account,
+            "credential:123e4567-e89b-12d3-a456-426614174000:api_key"
+        );
+
+        // The trusted-path list must contain the resolved vault-cli path.
+        assert!(
+            !paths.is_empty(),
+            "trusted paths must not be empty"
+        );
+        assert!(
+            paths.iter().any(|p| p.ends_with("vault-cli")),
+            "expected vault-cli in trusted paths, got: {paths:?}"
+        );
+    }
+
+    /// env_override paths are included in the trusted-path list.
+    #[test]
+    fn keychain_account_and_access_targets_includes_env_override_paths() {
+        use std::path::Path;
+        let id = Uuid::new_v4();
+        let fake_exe = Path::new("/nonexistent/target/debug/vault-cli");
+        let extra = "/nonexistent/other/bin/helper";
+
+        let (_account, paths) =
+            keychain_account_and_access_targets(id, "api_key", fake_exe, Some(extra))
+                .expect("helper should succeed");
+
+        assert!(
+            paths.iter().any(|p| p.ends_with("helper")),
+            "expected helper in trusted paths, got: {paths:?}"
         );
     }
 
