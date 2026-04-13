@@ -80,7 +80,7 @@
                     <td>{{ event.operation }}</td>
                     <td class="hide-mobile">{% match event.model %}{% when Some with (m) %}{{ m }}{% when None %}—{% endmatch %}</td>
                     <td class="hide-mobile">{% match event.total_tokens %}{% when Some with (t) %}{{ t }}{% when None %}—{% endmatch %}</td>
-                    <td>{% if event.success %}&#10003;{% else %}&#10007;{% endif %}</td>
+                    <td>{% if event.success %}<span class="status-ok">&#10003;</span>{% else %}<span class="status-fail">&#10007;</span>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

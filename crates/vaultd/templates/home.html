@@ -73,7 +73,7 @@
                 <td>{{ event.provider }}</td>
                 <td>{{ event.agent_name }}</td>
                 <td>{{ event.operation }}</td>
-                <td>{% if event.success %}&#10003;{% else %}&#10007;{% endif %}</td>
+                <td>{% if event.success %}<span class="status-ok">&#10003;</span>{% else %}<span class="status-fail">&#10007;</span>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
