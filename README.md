@@ -15,8 +15,8 @@ Coding agents (Codex, Claude Code, Cursor, etc.) need API keys to call LLMs, sea
 ## Quick Start
 
 ```bash
-# Build
-cargo build
+# Build (produces 'vault' binary in target/debug/)
+cargo build -p vault-cli
 
 # Store an API key (prompts securely, never shown in shell history)
 vault credential add openai work-main --kind api_key --env work
