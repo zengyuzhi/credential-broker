@@ -268,7 +268,6 @@ pub async fn login_handler(
 /// Axum extractor that validates the `vault_session` cookie and returns the active session.
 /// Rejects with `401 Unauthorized` if the cookie is missing, invalid, or expired.
 pub struct AuthSession {
-    #[allow(dead_code)]
     pub session: UiSession,
 }
 
@@ -324,7 +323,6 @@ where
 ///
 /// Call this at the top of POST/PUT/DELETE handlers that require dashboard auth.
 /// Returns `Err((StatusCode, String))` on validation failure.
-#[allow(dead_code)]
 pub fn validate_csrf(headers: &HeaderMap, session: &UiSession) -> Result<(), (StatusCode, String)> {
     // Validate Origin header.
     let origin = headers

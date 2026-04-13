@@ -6,7 +6,12 @@ pub mod stats;
 
 use axum::{
     Router,
+    http::{HeaderValue, Method, header},
     routing::{get, post},
+};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    set_header::SetResponseHeaderLayer,
 };
 
 use crate::app::AppState;
@@ -14,6 +19,15 @@ use crate::auth::{challenge_handler, login_handler};
 use crate::static_assets::login_page;
 
 pub fn router(state: AppState) -> Router {
+    // CORS: restrict to loopback origin only.
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::exact(
+            "http://127.0.0.1:8765".parse().unwrap(),
+        ))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE, header::COOKIE])
+        .allow_credentials(true);
+
     Router::new()
         .merge(health::health_router())
         .merge(stats::stats_router())
@@ -36,4 +50,19 @@ pub fn router(state: AppState) -> Router {
             post(dashboard::toggle_credential),
         )
         .with_state(state)
+        // Security headers on every response.
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        // CORS layer outermost so preflight requests are handled before auth.
+        .layer(cors)
 }
