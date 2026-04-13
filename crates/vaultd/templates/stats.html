@@ -46,7 +46,7 @@
                     <td class="hide-mobile">{{ stat.completion_tokens }}</td>
                     <td>{{ stat.total_tokens }}</td>
                     <td>${{ stat.estimated_cost_usd }}</td>
-                    <td class="hide-mobile">{{ stat.last_used_at }}</td>
+                    <td class="hide-mobile"><time datetime="{{ stat.last_used_at }}">{{ stat.last_used_at }}</time></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -74,7 +74,7 @@
             <tbody>
                 {% for event in recent_events %}
                 <tr>
-                    <td class="hide-mobile">{{ event.created_at }}</td>
+                    <td class="hide-mobile"><time datetime="{{ event.created_at }}">{{ event.created_at }}</time></td>
                     <td>{{ event.provider }}</td>
                     <td>{{ event.agent_name }}</td>
                     <td>{{ event.operation }}</td>

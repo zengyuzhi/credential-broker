@@ -16,7 +16,7 @@
         <dt>Default Project</dt>
         <dd>{% match pw.profile.default_project %}{% when Some(proj) %}{{ proj }}{% when None %}none{% endmatch %}</dd>
         <dt>Created</dt>
-        <dd>{{ pw.profile.created_at }}</dd>
+        <dd><time datetime="{{ pw.profile.created_at }}">{{ pw.profile.created_at }}</time></dd>
     </dl>
     <details>
         <summary>Bindings ({{ pw.bindings.len() }})</summary>

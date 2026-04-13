@@ -5,7 +5,7 @@
 
 <h3>Active Sessions</h3>
 {% if active_leases.is_empty() %}
-<p>No active sessions.</p>
+<p>No active sessions. Leases appear here when <code>vault run</code> launches a process.</p>
 {% else %}
 <figure>
     <table>
@@ -24,8 +24,8 @@
                 <td>{{ lease.agent_name }}</td>
                 <td class="hide-mobile"><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
                 <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
-                <td class="hide-mobile">{{ lease.issued_at }}</td>
-                <td>{{ lease.expires_at }}</td>
+                <td class="hide-mobile"><time datetime="{{ lease.issued_at }}">{{ lease.issued_at }}</time></td>
+                <td><time datetime="{{ lease.expires_at }}">{{ lease.expires_at }}</time></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -35,7 +35,7 @@
 
 <h3>Recent Expired Sessions</h3>
 {% if expired_leases.is_empty() %}
-<p>No expired sessions.</p>
+<p>No expired sessions yet.</p>
 {% else %}
 <figure>
     <table>
@@ -54,8 +54,8 @@
                 <td>{{ lease.agent_name }}</td>
                 <td class="hide-mobile"><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
                 <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
-                <td class="hide-mobile">{{ lease.issued_at }}</td>
-                <td>{{ lease.expires_at }}</td>
+                <td class="hide-mobile"><time datetime="{{ lease.issued_at }}">{{ lease.issued_at }}</time></td>
+                <td><time datetime="{{ lease.expires_at }}">{{ lease.expires_at }}</time></td>
             </tr>
             {% endfor %}
         </tbody>

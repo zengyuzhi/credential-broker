@@ -23,7 +23,7 @@
 
 <h2>Provider Usage</h2>
 {% if provider_stats.is_empty() %}
-<p>No usage data yet.</p>
+<p>No usage data yet. Run <code>vault run --profile &lt;name&gt; -- &lt;cmd&gt;</code> to start tracking.</p>
 {% else %}
 <figure>
     <table>
@@ -43,7 +43,7 @@
                 <td>{{ stat.request_count }}</td>
                 <td>{{ stat.total_tokens }}</td>
                 <td class="hide-mobile">${{ stat.estimated_cost_usd }}</td>
-                <td class="hide-mobile">{{ stat.last_used_at }}</td>
+                <td class="hide-mobile"><time datetime="{{ stat.last_used_at }}">{{ stat.last_used_at }}</time></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -53,7 +53,7 @@
 
 <h2>Recent Activity</h2>
 {% if recent_events.is_empty() %}
-<p>No recent activity.</p>
+<p>No recent activity. Events will appear here as credentials are used.</p>
 {% else %}
 <figure>
     <table>
@@ -69,7 +69,7 @@
         <tbody>
             {% for event in recent_events %}
             <tr>
-                <td class="hide-mobile">{{ event.created_at }}</td>
+                <td class="hide-mobile"><time datetime="{{ event.created_at }}">{{ event.created_at }}</time></td>
                 <td>{{ event.provider }}</td>
                 <td>{{ event.agent_name }}</td>
                 <td>{{ event.operation }}</td>

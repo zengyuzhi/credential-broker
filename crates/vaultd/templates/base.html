@@ -59,6 +59,25 @@
         </main>
     </div>
     <script>
+    // Format ISO timestamps into human-readable local time.
+    function formatTimestamps() {
+        document.querySelectorAll('time[datetime]').forEach(function(el) {
+            var d = new Date(el.getAttribute('datetime'));
+            if (isNaN(d)) return;
+            var now = new Date();
+            var diff = (now - d) / 1000;
+            if (diff < 60) { el.textContent = 'just now'; }
+            else if (diff < 3600) { el.textContent = Math.floor(diff / 60) + 'm ago'; }
+            else if (diff < 86400) { el.textContent = Math.floor(diff / 3600) + 'h ago'; }
+            else if (diff < 604800) { el.textContent = Math.floor(diff / 86400) + 'd ago'; }
+            else { el.textContent = d.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}); }
+            el.title = d.toLocaleString();
+        });
+    }
+    formatTimestamps();
+    // Re-format after htmx swaps.
+    document.body.addEventListener('htmx:afterSwap', formatTimestamps);
+
     // Mark active nav link based on current path.
     (function() {
         var path = window.location.pathname;
