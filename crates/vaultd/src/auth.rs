@@ -209,6 +209,14 @@ pub async fn login_handler(
         return Err((StatusCode::GONE, "challenge has expired".to_string()));
     }
 
+    // Reject already-used challenges (PIN invalidated after first successful login).
+    if session.session_token_hash.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            "challenge already used; request a new one".to_string(),
+        ));
+    }
+
     // Burn after max attempts.
     if session.attempts >= MAX_ATTEMPTS {
         return Err((
@@ -471,6 +479,32 @@ mod tests {
             .unwrap();
         // Handler checks `attempts >= MAX_ATTEMPTS` before verifying PIN.
         assert!(found.attempts >= MAX_ATTEMPTS, "attempts should be at max");
+    }
+
+    #[tokio::test]
+    async fn already_activated_challenge_is_rejected() {
+        let ts = temp_store().await;
+        let session = make_session("chal-replay", "555555", 0);
+        ts.store.insert_ui_session(&session).await.unwrap();
+
+        // First activation succeeds.
+        ts.store
+            .activate_session("chal-replay", "tok_hash_1", "csrf_1")
+            .await
+            .unwrap();
+
+        // After activation, session_token_hash is Some — the handler should
+        // reject a second login attempt with CONFLICT.
+        let found = ts
+            .store
+            .get_ui_session_by_challenge_id("chal-replay")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            found.session_token_hash.is_some(),
+            "session should have a token hash after activation"
+        );
     }
 
     // --- CSRF validation ---

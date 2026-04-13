@@ -74,7 +74,7 @@ pub async fn home_page(_auth: AuthSession, State(state): State<AppState>) -> Res
         }
     };
 
-    let recent_events = match store.list_usage_events(10).await {
+    let recent_events = match store.list_usage_events(5).await {
         Ok(events) => events,
         Err(err) => {
             tracing::error!("failed to list usage events: {err}");
