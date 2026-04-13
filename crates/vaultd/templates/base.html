@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Vault{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1f512;</text></svg>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <style>
@@ -26,7 +27,7 @@
         .sse-banner {
             position: fixed; bottom: 0; left: 0; right: 0;
             padding: 0.5rem; text-align: center; font-size: 0.85rem;
-            background: var(--pico-del-color); color: #fff; z-index: 999;
+            background: var(--pico-del-color); color: var(--pico-background-color); z-index: 999;
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -44,6 +45,8 @@
             }
             .vault-toggle { display: inline-block; }
             .vault-main { padding: 1rem; }
+            .vault-nav li { padding: 0.5rem 0; }
+            .btn-sm { min-height: 44px; }
             table { font-size: 0.85rem; }
             .hide-mobile { display: none; }
         }
@@ -80,7 +83,11 @@
             if (isNaN(d)) return;
             var now = new Date();
             var diff = (now - d) / 1000;
-            if (diff < 60) { el.textContent = 'just now'; }
+            if (diff < -86400) { el.textContent = 'in ' + Math.floor(-diff / 86400) + 'd'; }
+            else if (diff < -3600) { el.textContent = 'in ' + Math.floor(-diff / 3600) + 'h'; }
+            else if (diff < -60) { el.textContent = 'in ' + Math.floor(-diff / 60) + 'm'; }
+            else if (diff < 0) { el.textContent = 'soon'; }
+            else if (diff < 60) { el.textContent = 'just now'; }
             else if (diff < 3600) { el.textContent = Math.floor(diff / 60) + 'm ago'; }
             else if (diff < 86400) { el.textContent = Math.floor(diff / 3600) + 'h ago'; }
             else if (diff < 604800) { el.textContent = Math.floor(diff / 86400) + 'd ago'; }
