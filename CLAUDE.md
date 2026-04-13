@@ -9,7 +9,11 @@ cargo build                          # build all crates
 cargo test                           # run all tests
 cargo clippy --workspace --all-targets -- -D warnings  # lint (strict)
 cargo run -p vault-cli -- <subcmd>   # run CLI (e.g. credential list)
-cargo run -p vaultd                  # start daemon on 127.0.0.1:8765
+vault serve                          # start server on 127.0.0.1:8765
+vault serve --background             # start in background with PID file
+vault serve stop                     # stop background server
+vault ui                             # auto-start server + open dashboard
+cargo run -p vaultd                  # deprecated, use vault serve instead
 cargo test -p vault-db               # test a single crate
 cargo fmt --all                       # format all crates
 ```
@@ -18,7 +22,7 @@ The SQLite database lives at `.local/vault.db` (gitignored). Override with `VAUL
 
 ## Architecture
 
-This is a local credential broker that lets coding agents and scripts access API keys without seeing the raw secrets. Two binaries, six library crates:
+This is a local credential broker that lets coding agents and scripts access API keys without seeing the raw secrets. Two binaries, six library crates (`vault serve` in vault-cli replaces standalone vaultd):
 
 ```
 vault-cli (binary)          vaultd (binary)
