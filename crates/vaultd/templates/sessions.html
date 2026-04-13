@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Sessions — Vault{% endblock %}
+{% block content %}
+<h2>Sessions</h2>
+
+<h3>Active Sessions</h3>
+{% if active_leases.is_empty() %}
+<p>No active sessions.</p>
+{% else %}
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th>Agent</th>
+                <th>Profile ID</th>
+                <th>Project</th>
+                <th>Issued At</th>
+                <th>Expires At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lease in active_leases %}
+            <tr>
+                <td>{{ lease.agent_name }}</td>
+                <td><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
+                <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
+                <td>{{ lease.issued_at }}</td>
+                <td>{{ lease.expires_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+{% endif %}
+
+<h3>Recent Expired Sessions</h3>
+{% if expired_leases.is_empty() %}
+<p>No expired sessions.</p>
+{% else %}
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th>Agent</th>
+                <th>Profile ID</th>
+                <th>Project</th>
+                <th>Issued At</th>
+                <th>Expires At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lease in expired_leases %}
+            <tr>
+                <td>{{ lease.agent_name }}</td>
+                <td><code>{{ lease.profile_id.to_string()|truncate(8) }}…</code></td>
+                <td>{% match lease.project %}{% when Some(proj) %}{{ proj }}{% when None %}<em>none</em>{% endmatch %}</td>
+                <td>{{ lease.issued_at }}</td>
+                <td>{{ lease.expires_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+{% endif %}
+{% endblock %}

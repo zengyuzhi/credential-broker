@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Profiles — Vault{% endblock %}
+{% block content %}
+<h2>Profiles</h2>
+{% if profiles.is_empty() %}
+<p>No profiles found. Use <code>vault profile create</code> to add one.</p>
+{% else %}
+{% for pw in profiles %}
+<article>
+    <header>
+        <strong>{{ pw.profile.name }}</strong>
+    </header>
+    <dl>
+        <dt>Description</dt>
+        <dd>{% match pw.profile.description %}{% when Some(desc) %}{{ desc }}{% when None %}none{% endmatch %}</dd>
+        <dt>Default Project</dt>
+        <dd>{% match pw.profile.default_project %}{% when Some(proj) %}{{ proj }}{% when None %}none{% endmatch %}</dd>
+        <dt>Created</dt>
+        <dd>{{ pw.profile.created_at }}</dd>
+    </dl>
+    <h4>Bindings</h4>
+    {% if pw.bindings.is_empty() %}
+    <p><em>No bindings.</em></p>
+    {% else %}
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Provider</th>
+                    <th>Credential ID</th>
+                    <th>Mode</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for binding in pw.bindings %}
+                <tr>
+                    <td>{{ binding.provider }}</td>
+                    <td><code>{{ binding.credential_id.to_string()|truncate(8) }}…</code></td>
+                    <td>{% match binding.mode %}{% when vault_core::models::AccessMode::Inject %}Inject{% when vault_core::models::AccessMode::Proxy %}Proxy{% when vault_core::models::AccessMode::Either %}Either{% endmatch %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+    {% endif %}
+</article>
+{% endfor %}
+{% endif %}
+{% endblock %}

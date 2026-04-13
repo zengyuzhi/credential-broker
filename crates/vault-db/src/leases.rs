@@ -61,6 +61,29 @@ impl Store {
         .await?;
         Ok(count)
     }
+
+    /// List all active leases (not yet expired).
+    pub async fn list_active_leases(&self) -> Result<Vec<Lease>> {
+        let rows = sqlx::query(
+            "SELECT id, profile_id, agent_name, project, issued_at, expires_at, session_token_hash \
+             FROM leases WHERE expires_at > datetime('now') ORDER BY issued_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(map_lease_row).collect()
+    }
+
+    /// List expired leases (most recent first, with a limit).
+    pub async fn list_expired_leases(&self, limit: i64) -> Result<Vec<Lease>> {
+        let rows = sqlx::query(
+            "SELECT id, profile_id, agent_name, project, issued_at, expires_at, session_token_hash \
+             FROM leases WHERE expires_at <= datetime('now') ORDER BY expires_at DESC LIMIT ?1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(map_lease_row).collect()
+    }
 }
 
 fn map_lease_row(row: sqlx::sqlite::SqliteRow) -> Result<Lease> {

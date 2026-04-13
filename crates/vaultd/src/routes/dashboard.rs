@@ -1,4 +1,4 @@
-//! Dashboard home and credentials page handlers.
+//! Dashboard home, credentials, profiles, and sessions page handlers.
 
 use askama::Template;
 use axum::{
@@ -151,6 +151,123 @@ pub async fn credentials_page(auth: AuthSession, State(state): State<AppState>) 
             .into_response(),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Profiles page
+// ---------------------------------------------------------------------------
+
+pub struct ProfileWithBindings {
+    pub profile: vault_core::models::Profile,
+    pub bindings: Vec<vault_core::models::ProfileBinding>,
+}
+
+#[derive(Template)]
+#[template(path = "profiles.html")]
+pub struct ProfilesTemplate {
+    pub profiles: Vec<ProfileWithBindings>,
+}
+
+/// `GET /profiles` — profiles list page (requires active session).
+pub async fn profiles_page(_auth: AuthSession, State(state): State<AppState>) -> Response {
+    let store = &state.store;
+
+    let profile_list = match store.list_profiles().await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::error!("failed to list profiles: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load profiles".to_string(),
+            )
+                .into_response();
+        }
+    };
+
+    let mut profiles: Vec<ProfileWithBindings> = Vec::with_capacity(profile_list.len());
+    for profile in profile_list {
+        let bindings = match store.list_bindings_for_profile(profile.id).await {
+            Ok(b) => b,
+            Err(err) => {
+                tracing::error!("failed to list bindings for profile {}: {err}", profile.id);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to load profile bindings".to_string(),
+                )
+                    .into_response();
+            }
+        };
+        profiles.push(ProfileWithBindings { profile, bindings });
+    }
+
+    let tmpl = ProfilesTemplate { profiles };
+
+    match tmpl.render() {
+        Ok(html) => Html(html).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("template error: {err}"),
+        )
+            .into_response(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sessions page
+// ---------------------------------------------------------------------------
+
+#[derive(Template)]
+#[template(path = "sessions.html")]
+pub struct SessionsTemplate {
+    pub active_leases: Vec<vault_core::models::Lease>,
+    pub expired_leases: Vec<vault_core::models::Lease>,
+}
+
+/// `GET /sessions` — sessions list page (requires active session).
+pub async fn sessions_page(_auth: AuthSession, State(state): State<AppState>) -> Response {
+    let store = &state.store;
+
+    let active_leases = match store.list_active_leases().await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::error!("failed to list active leases: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load active leases".to_string(),
+            )
+                .into_response();
+        }
+    };
+
+    let expired_leases = match store.list_expired_leases(50).await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::error!("failed to list expired leases: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load expired leases".to_string(),
+            )
+                .into_response();
+        }
+    };
+
+    let tmpl = SessionsTemplate {
+        active_leases,
+        expired_leases,
+    };
+
+    match tmpl.render() {
+        Ok(html) => Html(html).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("template error: {err}"),
+        )
+            .into_response(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Credentials toggle
+// ---------------------------------------------------------------------------
 
 /// `POST /api/credentials/:id/toggle` — enable/disable a credential (htmx partial response).
 pub async fn toggle_credential(
