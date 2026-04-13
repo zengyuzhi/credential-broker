@@ -4,15 +4,17 @@ mod support;
 use clap::{Parser, Subcommand};
 use commands::{
     credential::run_credential_command, profile::run_profile_command, run::run_agent_command,
-    stats::run_stats_command,
+    stats::run_stats_command, ui::run_ui_command,
 };
 
 #[derive(Debug, Parser)]
 #[command(name = "vault")]
 #[command(about = "Local credential broker for coding agents and scripts")]
-#[command(long_about = "Store API keys securely in macOS Keychain, organize them into named profiles, \
+#[command(
+    long_about = "Store API keys securely in macOS Keychain, organize them into named profiles, \
     and launch agent subprocesses with credentials injected as environment variables \
-    or forwarded through an authenticated HTTP proxy. Every access is lease-bounded and tracked.")]
+    or forwarded through an authenticated HTTP proxy. Every access is lease-bounded and tracked."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -28,6 +30,8 @@ enum Command {
     Run(commands::run::RunCommand),
     #[command(about = "Display usage statistics per provider")]
     Stats(commands::stats::StatsCommand),
+    #[command(about = "Open the vault dashboard in your browser")]
+    Ui(commands::ui::UiCommand),
 }
 
 #[tokio::main]
@@ -39,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Profile(cmd) => run_profile_command(cmd).await?,
         Command::Run(cmd) => run_agent_command(cmd).await?,
         Command::Stats(cmd) => run_stats_command(cmd).await?,
+        Command::Ui(cmd) => run_ui_command(cmd).await?,
     }
     Ok(())
 }
