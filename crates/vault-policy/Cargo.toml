@@ -1,0 +1,11 @@
+[package]
+name = "vault-policy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+vault-core = { path = "../vault-core" }

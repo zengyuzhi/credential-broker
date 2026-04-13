@@ -1,0 +1,22 @@
+[package]
+name = "vault-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+rpassword = "7"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+vault-core = { path = "../vault-core" }
+vault-db = { path = "../vault-db" }
+vault-providers = { path = "../vault-providers" }
+vault-policy = { path = "../vault-policy" }
+vault-secrets = { path = "../vault-secrets" }
+
+[dev-dependencies]
+tempfile = "3"

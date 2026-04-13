@@ -1,0 +1,9 @@
+[package]
+name = "vault-telemetry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+vault-core = { path = "../vault-core" }
+vault-db = { path = "../vault-db" }
