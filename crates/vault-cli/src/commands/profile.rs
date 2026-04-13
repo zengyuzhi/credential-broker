@@ -32,7 +32,11 @@ pub enum ProfileSubcommand {
         provider: String,
         #[arg(help = "Credential UUID to bind")]
         credential_id: String,
-        #[arg(long, default_value = "either", help = "Access mode: inject (env vars), proxy (HTTP forwarding), or either")]
+        #[arg(
+            long,
+            default_value = "either",
+            help = "Access mode: inject (env vars), proxy (HTTP forwarding), or either"
+        )]
         mode: String,
     },
     #[command(about = "Show profile details and its bindings")]

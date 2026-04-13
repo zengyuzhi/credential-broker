@@ -29,9 +29,17 @@ pub enum CredentialSubcommand {
         provider: String,
         #[arg(help = "Human-readable label for this credential")]
         label: String,
-        #[arg(long, default_value = "api_key", help = "Credential type: api_key, bearer_token, oauth, bundle")]
+        #[arg(
+            long,
+            default_value = "api_key",
+            help = "Credential type: api_key, bearer_token, oauth, bundle"
+        )]
         kind: String,
-        #[arg(long, default_value = "work", help = "Environment tag: work, personal, prod")]
+        #[arg(
+            long,
+            default_value = "work",
+            help = "Environment tag: work, personal, prod"
+        )]
         env: String,
     },
     #[command(about = "List all stored credentials")]
