@@ -3,14 +3,18 @@ mod routes;
 
 use std::net::SocketAddr;
 
-use axum::Router;
-use routes::{health::health_router, stats::stats_router};
+use app::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
-    let app = Router::new().merge(health_router()).merge(stats_router());
+    let database_url = std::env::var("VAULT_DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite:.local/vault.db".to_string());
+
+    let state = AppState::new(&database_url).await?;
+
+    let app = routes::router(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8765));
     let listener = tokio::net::TcpListener::bind(addr).await?;

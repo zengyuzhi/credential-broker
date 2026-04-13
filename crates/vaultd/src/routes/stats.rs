@@ -1,7 +1,9 @@
 use axum::{Json, Router, routing::get};
 use serde_json::json;
 
-pub fn stats_router() -> Router {
+use crate::app::AppState;
+
+pub fn stats_router() -> Router<AppState> {
     Router::new().route("/stats/providers", get(provider_stats))
 }
 
