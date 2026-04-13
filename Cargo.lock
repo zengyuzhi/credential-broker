@@ -2834,7 +2834,10 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "reqwest",
  "rpassword",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",
@@ -2846,6 +2849,7 @@ dependencies = [
  "vault-providers",
  "vault-secrets",
  "vault-telemetry",
+ "vaultd",
 ]
 
 [[package]]
@@ -2867,6 +2871,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "serde",
  "sqlx",
  "tempfile",
  "tokio",

@@ -4,7 +4,7 @@ mod support;
 use clap::{Parser, Subcommand};
 use commands::{
     credential::run_credential_command, profile::run_profile_command, run::run_agent_command,
-    stats::run_stats_command, ui::run_ui_command,
+    serve::run_serve_command, stats::run_stats_command, ui::run_ui_command,
 };
 
 #[derive(Debug, Parser)]
@@ -32,6 +32,8 @@ enum Command {
     Stats(commands::stats::StatsCommand),
     #[command(about = "Open the vault dashboard in your browser")]
     Ui(commands::ui::UiCommand),
+    #[command(about = "Start the vault HTTP server (dashboard and proxy)")]
+    Serve(commands::serve::ServeCommand),
 }
 
 #[tokio::main]
@@ -44,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Run(cmd) => run_agent_command(cmd).await?,
         Command::Stats(cmd) => run_stats_command(cmd).await?,
         Command::Ui(cmd) => run_ui_command(cmd).await?,
+        Command::Serve(cmd) => run_serve_command(cmd).await?,
     }
     Ok(())
 }
