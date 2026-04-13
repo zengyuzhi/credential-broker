@@ -11,6 +11,7 @@ cargo clippy --workspace --all-targets -- -D warnings  # lint (strict)
 cargo run -p vault-cli -- <subcmd>   # run CLI (e.g. credential list)
 cargo run -p vaultd                  # start daemon on 127.0.0.1:8765
 cargo test -p vault-db               # test a single crate
+cargo fmt --all                       # format all crates
 ```
 
 The SQLite database lives at `.local/vault.db` (gitignored). Override with `VAULT_DATABASE_URL` env var. Migrations in `migrations/` are auto-applied by `vault-db` on pool creation via `sqlx::migrate!`.
