@@ -7,3 +7,5 @@ target/
 *.db-wal
 .claude/
 .codex/
+.serena/
+.supply-chain-risk-auditor/

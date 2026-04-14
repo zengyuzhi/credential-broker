@@ -22,6 +22,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use uuid::Uuid;
 use vault_db::UiSession;
 
@@ -126,17 +127,13 @@ fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
 
 pub async fn challenge_handler(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> Result<Json<ChallengeResponse>, (StatusCode, String)> {
-    // Identify caller for rate-limiting (fall back to a fixed key — loopback only anyway).
-    let caller_key = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("host"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("local")
-        .to_string();
-
-    if !state.rate_limiter.check_and_increment(&caller_key) {
+    // Rate-limiting uses a fixed server-side key because vaultd binds to
+    // 127.0.0.1 only — every caller is local. A client-controlled header
+    // (e.g. x-forwarded-for) would let a single process rotate headers to
+    // get unlimited PIN-challenge attempts, defeating the limiter.
+    if !state.rate_limiter.check_and_increment("loopback") {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             "rate limit exceeded: max 3 challenge requests per minute".to_string(),
@@ -225,8 +222,14 @@ pub async fn login_handler(
         ));
     }
 
-    // Verify PIN hash.
-    if hash(&body.pin) != session.pin_hash {
+    // Verify PIN hash using constant-time comparison (both values are
+    // 64-char blake3 hex digests, so length varies do not occur).
+    let computed_pin_hash = hash(&body.pin);
+    if !bool::from(
+        computed_pin_hash
+            .as_bytes()
+            .ct_eq(session.pin_hash.as_bytes()),
+    ) {
         state
             .store
             .increment_attempts(&body.challenge_id)
@@ -351,8 +354,13 @@ pub fn validate_csrf(headers: &HeaderMap, session: &UiSession) -> Result<(), (St
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let expected = session.csrf_token.as_deref().unwrap_or("");
-    if csrf_header_value != expected || expected.is_empty() {
+    // Reject missing-or-empty expected token before the timing-sensitive
+    // comparison so the empty case short-circuits without leaking whether
+    // the header matched an empty expected.
+    let Some(expected) = session.csrf_token.as_deref() else {
+        return Err((StatusCode::FORBIDDEN, "invalid CSRF token".to_string()));
+    };
+    if expected.is_empty() || !bool::from(csrf_header_value.as_bytes().ct_eq(expected.as_bytes())) {
         return Err((StatusCode::FORBIDDEN, "invalid CSRF token".to_string()));
     }
 

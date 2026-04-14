@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use async_trait::async_trait;
 use security_framework::os::macos::keychain::SecKeychain;
-use security_framework::passwords::{
-    delete_generic_password, get_generic_password, set_generic_password,
-};
+use security_framework::passwords::{delete_generic_password, get_generic_password};
 use tokio::io::AsyncWriteExt;
 
 use crate::SecretStore;
@@ -134,12 +132,6 @@ impl MacOsKeychainStore {
 
 #[async_trait]
 impl SecretStore for MacOsKeychainStore {
-    async fn put(&self, service: &str, account: &str, secret: &str) -> anyhow::Result<String> {
-        set_generic_password(service, account, secret.as_bytes())
-            .with_context(|| format!("failed to store secret for {service}/{account}"))?;
-        Ok(format!("{service}:{account}"))
-    }
-
     async fn get(&self, service: &str, account: &str) -> anyhow::Result<String> {
         let _interaction_lock = SecKeychain::disable_user_interaction()
             .context("failed to disable macOS keychain user interaction")?;
