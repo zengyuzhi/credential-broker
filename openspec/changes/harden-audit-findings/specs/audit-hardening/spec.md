@@ -16,15 +16,15 @@ The `SecretStore::get` trait method in `crates/vault-secrets/src/lib.rs` SHALL r
 - **THEN** the Rust compiler SHALL reject any `get` impl that returns a bare `String`
 - **AND** the implementer is forced through `Zeroizing<String>` or an equivalent wiping wrapper
 
-### Requirement: Resolved credential structs SHALL derive `ZeroizeOnDrop`
+### Requirement: Resolved credential structs SHALL wipe secret fields on drop
 
-The `ResolvedCredential` struct in `crates/vault-cli/src/commands/run.rs` and any equivalent per-binding resolution struct SHALL derive `zeroize::ZeroizeOnDrop`. The `secret_value` field (and any sibling field carrying raw secret material) MUST either be `Zeroizing<String>` or be recognized by the derive macro for wiping.
+The `ResolvedCredential` struct in `crates/vault-core/src/provider.rs` and any equivalent per-binding resolution struct SHALL wipe its secret-bearing fields (the values of `fields: HashMap<String, String>`, and any sibling field carrying raw secret material) when dropped. This SHALL be implemented either via `#[derive(zeroize::ZeroizeOnDrop)]` OR via a manual `Drop` impl that calls `Zeroize::zeroize` on each secret value. A manual impl is required when fields use container types (e.g., `HashMap<String, String>`) that `zeroize` 1.x does not provide a blanket `Zeroize` impl for.
 
 #### Scenario: `vault run` wipes resolved secrets after spawn
 
 - **WHEN** `vault run --profile foo -- cmd` completes the `Command::spawn` call
 - **THEN** the `ResolvedCredential` instances go out of scope at function return
-- **AND** every `secret_value` field is zeroed before the heap allocation is freed
+- **AND** every secret value in `ResolvedCredential.fields` is zeroed before the heap allocation is freed
 
 #### Scenario: Drop on early return path
 

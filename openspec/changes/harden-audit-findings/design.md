@@ -38,7 +38,7 @@ Workspace constraint: no `zeroize` anywhere yet. `sqlx` does transitively pull i
 
 ### Decision 2 — Wrap, don't refactor to `Secret<T>` everywhere
 
-**Choice:** Use `Zeroizing<String>` / `Zeroizing<Vec<u8>>` at the boundaries where secrets live; derive `#[derive(ZeroizeOnDrop)]` on structs (`ResolvedCredential`) that hold them. Do *not* introduce a workspace-wide `Secret<T>` newtype.
+**Choice:** Use `Zeroizing<String>` / `Zeroizing<Vec<u8>>` at the boundaries where secrets live. For structs that hold secrets (`ResolvedCredential`), prefer `#[derive(ZeroizeOnDrop)]`; fall back to a manual `impl Drop` when fields use container types (e.g., `HashMap<String, String>`) that `zeroize` 1.x does not blanket-impl `Zeroize` for — this is the case for `ResolvedCredential.fields` and landed as a custom `Drop` in `vault-core/src/provider.rs`. Do *not* introduce a workspace-wide `Secret<T>` newtype.
 
 **Why:** `Zeroizing<T>` is a transparent wrapper that `Deref`s to `T` — call sites using `&secret` or `.as_str()` keep compiling. A `Secret<T>` newtype would force every call site through a getter, touching dozens of files for a property already guaranteed by `Zeroizing`.
 

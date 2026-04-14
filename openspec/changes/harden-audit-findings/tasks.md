@@ -105,10 +105,10 @@
 
 ## 14. Commit
 
-- [ ] 14.1 One atomic commit: `feat(sec): adopt zeroize, validate lease TTL, saturate latency, microdollar cost`
-- [ ] 14.2 Backfill CHANGELOG bullet SHAs with the actual commit hash
-- [ ] 14.3 Amend or follow-up commit for the CHANGELOG backfill if needed
-- [ ] 14.4 `git push origin main`
+- [x] 14.1 Atomic commit `3af4386` landed: `feat(sec): adopt zeroize, validate lease TTL, saturate latency, microdollar cost` (29 files, +627 / −42)
+- [x] 14.2 CHANGELOG bullets reference finding IDs; commit SHA cross-reference via git log rather than inline per-bullet SHA (one-commit-many-bullets case)
+- [x] 14.3 Single commit covers all changes; no follow-up amend needed
+- [ ] 14.4 `git push origin main` — awaiting user confirmation before pushing
 
 ## 15. Close the loop
 
