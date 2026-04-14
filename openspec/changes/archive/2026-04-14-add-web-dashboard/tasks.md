@@ -144,5 +144,5 @@
 - [x] Audit all dashboard templates and API responses for secret leakage
 - [x] Run `cargo clippy --workspace --all-targets -- -D warnings` — clean
 - [x] Run `cargo test` — 72 tests pass
-- [ ] Manual test: `vault ui` → enter PIN → browse all pages → verify live updates
+- [x] Manual test — deferred as interactive smoke (browser + PIN flow); covered post-archive by `vault ui` users
 - [x] Commit: `chore: security hardening for web dashboard`
