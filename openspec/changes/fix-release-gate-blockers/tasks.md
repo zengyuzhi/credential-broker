@@ -42,8 +42,8 @@
 
 ## 7. Commit + push
 
-- [ ] 7.1 Single atomic commit: `fix(v0.1.1): restore vault run on macOS 15 + dashboard SSE credential push`
-- [ ] 7.2 `git push origin main`
+- [x] 7.1 Single atomic commit: `fix(v0.1.1): restore vault run on macOS 15, SSE credential push, and sidebar nav` — commit `14cebf2`
+- [x] 7.2 `git push origin main` — `c918f80..14cebf2  main -> main`
 
 ## 8. Archive + spec sync
 

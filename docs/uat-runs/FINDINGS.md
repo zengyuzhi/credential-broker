@@ -46,7 +46,7 @@ run-log, a status, and — where resolved — the fix commit.
   by a `// NOTE:` comment that references the `keychain-acl-rewrite`
   follow-up and the `audit-hardening` spec's "Keychain read path
   silent-failure invariant" known-gap requirement. Regression guard:
-  `UAT-SEC-004`. Commit SHA to be backfilled at task 7.
+  `UAT-SEC-004`. Landed as commit `14cebf2`.
 
 ### Symptom
 
@@ -200,8 +200,7 @@ Decide before v0.1.1 tag. UAT-CLI-004's regex tightens in the same change.
   and related block-level list overrides, restoring the vertical sidebar that
   Pico CSS's default `nav ul { display: flex }` had collapsed. Active-page
   state uses `color-mix(... var(--pico-primary) 12%, transparent)` — no gradient
-  text, no left-stripe border, no glassmorphism. Commit SHA to be backfilled
-  at task 7.
+  text, no left-stripe border, no glassmorphism. Landed as commit `14cebf2`.
 
 ### Symptom
 
@@ -258,8 +257,7 @@ effectively can't move past Home.
   content — the old path dumped the entire returned `<html>` tree
   inside `<main>` and produced a duplicated sidebar nav on every
   toggle (rare pre-fix because `credential` only fired on add/remove).
-  Commit SHA to be backfilled once the change is committed under task 7
-  of the `fix-release-gate-blockers` change.
+  Landed as commit `14cebf2`.
 
 ### Symptom
 
