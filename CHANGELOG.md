@@ -34,6 +34,10 @@ User-visible bullets live here; implementation detail lives in `git log`.
 - **Removed dangerous default `SecretStore::put`** — the trait exposed an `put` method that stored secrets with no Keychain ACL; any app on the system could read them. No production code called it, but its presence invited future misuse. The sole supported write path is now `MacOsKeychainStore::put_with_access` (trusted-app ACL required). (SE-04 HIGH.)
 - Full baseline report: `docs/audits/2026-04-14-tob-baseline/SUMMARY.md`. 16 additional findings triaged to `docs/ROADMAP.md`; 6 accepted.
 
+### Quality
+
+- **User-acceptance-test release gate formalized** at [`docs/UAT.md`](docs/UAT.md) with 23 entries across 6 capability areas (CLI, dashboard, serve lifecycle, proxy, install/migration, security regression). Release procedure step 5 now runs the UAT pass before CHANGELOG rotation; golden-path failure or threshold miss (4/4 golden + ≥95% AUTO:ANY + ≥80% MANUAL:USER) blocks tag push. First AI-produced baseline run-log at [`docs/uat-runs/2026-04-14-v0.1.1-pre-ai.md`](docs/uat-runs/2026-04-14-v0.1.1-pre-ai.md) (`status: baseline-only`); v0.1.1 still requires a human-run UAT before tag. Canonical capability: `uat-release-gate`.
+
 ## [0.1.0] - 2026-04-14
 
 Initial personal release. macOS-only. Unsigned.

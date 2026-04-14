@@ -71,7 +71,30 @@ Run every item. If any fails, stop, fix, and restart from the top.
    gap in `SUMMARY.md` under "Incomplete scans". Gate only uses findings that completed.
    If no skill completed, the step fails.
 
-5. **CHANGELOG current.**
+5. **UAT pass.**
+   Walk the release-gate UAT checklist at [`UAT.md`](./UAT.md). Produce exactly one run-log
+   at `docs/uat-runs/<YYYY-MM-DD>-vX.Y.Z.md` (append `-ai` suffix if an AI agent ran it)
+   following the run-log template in `docs/UAT.md`.
+
+   **Gate decision (comparative, not absolute):**
+   - 4/4 golden-path entries (`UAT-CLI-001` through `UAT-CLI-004`) MUST report `PASS`.
+   - `[AUTO:ANY]` entries MUST reach ≥95% pass rate across all non-SKIP results.
+   - `[MANUAL:USER]` entries MUST reach ≥80% pass rate across all non-SKIP results.
+   - `[AUTO:CI]` and `[MANUAL:SHELL]` results are informational only; they do NOT block.
+   - Entries marked `SKIP` with documented reason do NOT count toward denominators.
+
+   Any golden-path failure, or a threshold miss on the AUTO:ANY / MANUAL:USER dimensions,
+   reports `Gate: FAIL` and blocks tag push until the underlying defect is fixed or the
+   UAT entry is re-disposed via a separate spec update. A run-log carrying front-matter
+   `status: partial` is treated as `Gate: FAIL`. Full contract lives in `docs/UAT.md`
+   and the canonical `uat-release-gate` capability spec.
+
+   **Skip exception:** docs-only releases (`git diff <last-tag>..HEAD` touches no files
+   outside `*.md`, `docs/`, `openspec/`) may skip this step. Record the skip in the
+   Retrospective section below with the exact phrase
+   `UAT skipped: docs-only diff since docs/uat-runs/<prior-run-path>.md`.
+
+6. **CHANGELOG current.**
    - Open `CHANGELOG.md`.
    - Move everything under `## [Unreleased]` into a new section: `## [X.Y.Z] - YYYY-MM-DD` (today, UTC).
    - Re-create an empty `## [Unreleased]` block with empty `### Added / Changed / ... / Security` subsections at the top.
@@ -79,7 +102,7 @@ Run every item. If any fails, stop, fix, and restart from the top.
    - Update the compare-URL footer: add a `[X.Y.Z]: .../releases/tag/vX.Y.Z` line and update `[Unreleased]: .../compare/vX.Y.Z...HEAD`.
    - If `## [Unreleased]` was empty before you started, stop and audit `git log` against the last tag — something got missed.
 
-6. **`vault --help` sanity check.**
+7. **`vault --help` sanity check.**
    ```bash
    cargo run -p vault-cli -- --help
    cargo run -p vault-cli -- run --help
@@ -87,18 +110,18 @@ Run every item. If any fails, stop, fix, and restart from the top.
    ```
    Visually diff against README snippets. If drift exists, either update README or add a follow-up task. Drift alone does **not** block the release.
 
-7. **Version bump.**
+8. **Version bump.**
    - Edit `crates/vault-cli/Cargo.toml`: set `version = "X.Y.Z"`.
    - Run `cargo check -p vault-cli` to refresh `Cargo.lock`.
    - For the v0.1.0 initial release only: no bump needed (already at `0.1.0`).
 
-8. **Working tree clean.**
+9. **Working tree clean.**
    ```bash
    git status
    ```
    After staging the CHANGELOG + version bump commit, expect `nothing to commit, working tree clean` before tagging.
 
-9. **On `main` and up to date.**
+10. **On `main` and up to date.**
    ```bash
    git rev-parse --abbrev-ref HEAD    # must print "main"
    git pull --ff-only origin main
