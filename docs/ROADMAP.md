@@ -12,6 +12,8 @@ Things plausibly happening in the next one or two releases.
 - **CHANGELOG enforcement in CI** `S` — fail the `check` job on `main` if `## [Unreleased]` would be empty at tag time, or add a lint that refuses release commits unless the version being released has a populated entry.
 - **`vault --help` parity check** `S` — scripted diff between `vault --help` output and the Quick Start block in README, surfaced as a CI warning rather than an error.
 - **`xattr` quarantine hint in README install section** `S` — document the workaround inline rather than only in release notes so first-time users find it.
+- **Bump GitHub Actions to v5 when available** `S` — `actions/checkout@v4` and `actions/upload-artifact@v4` run on Node 20, which is forced to Node 24 in June 2026 and removed September 2026. Surfaced by v0.1.0 release workflow annotation.
+- **Add `cargo-audit` to CI** `S` — RustSec advisory DB scan on `Cargo.lock`; catches public CVEs in the dep tree. Trail-of-Bits flavored; reviewed during v0.1.0 shipping.
 
 ## Medium-term
 

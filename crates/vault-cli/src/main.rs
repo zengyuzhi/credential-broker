@@ -9,6 +9,7 @@ use commands::{
 
 #[derive(Debug, Parser)]
 #[command(name = "vault")]
+#[command(version)]
 #[command(about = "Local credential broker for coding agents and scripts")]
 #[command(
     long_about = "Store API keys securely in macOS Keychain, organize them into named profiles, \

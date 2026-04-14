@@ -138,7 +138,11 @@ Add a one-line note to `CHANGELOG.md` under the new version: "Re-release of X.Y.
 After each release, append 1-3 bullets here noting anything surprising. Next release's checklist improvements come from this section.
 
 ### v0.1.0 (2026-04-14)
-<!-- fill in after cutting -->
+
+- **Pre-tag gate earned its keep on run #1.** `cargo fmt --check` caught 8 source files with formatting drift that none of our prior commits had normalized. CI would have caught it later; the checklist caught it before the tag went out. Keep the checklist.
+- **Post-tag install-script smoke test surfaced a clap gap.** `vault --version` wasn't wired up (`#[command(version)]` missing), even though README / CHANGELOG / release body all advertise the flag. Binary itself works; only the documented version probe fails. Not a binary recall. Fix went into `[Unreleased] → Fixed` and will ship in v0.1.1. **Add `vault --version` to step 5 (help sanity check) for next release — not just as a README cross-check.**
+- **GitHub Actions Node.js 20 deprecation warning.** `actions/checkout@v4` and `actions/upload-artifact@v4` run on Node 20, forced to Node 24 in June 2026. Non-blocking now; add "bump actions to v5 when available" to the roadmap's Near-term bucket.
+- **Workflow total time: ~6 min end-to-end.** test (3m) → build matrix in parallel (2-3m each) → release (10s). Good budget; no need for build splits yet.
 
 ---
 

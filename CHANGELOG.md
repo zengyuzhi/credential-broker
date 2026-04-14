@@ -19,6 +19,8 @@ User-visible bullets live here; implementation detail lives in `git log`.
 
 ### Fixed
 
+- `vault --version` / `vault -V` now report the version. v0.1.0 documentation advertised the flag but clap wasn't wired up for it (`#[command(version)]` missing). Install-script end-to-end smoke test caught the gap.
+
 ### Security
 
 ## [0.1.0] - 2026-04-14
