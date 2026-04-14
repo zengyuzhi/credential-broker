@@ -67,10 +67,10 @@
 ## 11. Commit
 
 - [x] 11.1 Fixes landed as one atomic commit `6dd9f7e` (`fix(sec): constant-time secret compare, remove ACL-less put, fix rate-limit key`) — grouped because they share the audit-finding origin and together form the baseline's Fix-now bundle
-- [ ] 11.2 Stage the baseline docs + ROADMAP + CHANGELOG + RELEASE.md + tasks.md as `docs: add Trail of Bits audit baseline 2026-04-14`
-- [ ] 11.3 `git push origin main`
+- [x] 11.2 Audit-docs commit `4e4a6a7` on `main`: baseline dir + CHANGELOG Security + ROADMAP additions + RELEASE.md step 4 + OpenSpec change
+- [x] 11.3 `git push origin main` → `007998e..4e4a6a7  main -> main`
 
 ## 12. Close the loop
 
 - [x] 12.1 All above tasks checked
-- [ ] 12.2 Archive via `/opsx:archive run-tob-audit-trio` so `security-audit-baseline` enters `openspec/specs/` and the delta on `release-process` lands
+- [x] 12.2 Archived to `openspec/changes/archive/2026-04-14-run-tob-audit-trio/`; `security-audit-baseline` synced (new capability, 5 requirements, 15 scenarios); `release-process` appended with 1 new requirement + 5 scenarios (existing 4 preserved)
