@@ -87,4 +87,10 @@ Served by vaultd (embedded in vault-cli via `vault serve`). Stack: askama templa
 - macOS `security add-generic-password`: place `-w` as the **last** argument with no value to read the password from stdin (avoids process-list exposure).
 - `MacOsKeychainStore` is a unit struct — construct with `MacOsKeychainStore`, not `MacOsKeychainStore::default()` (clippy `default_constructed_unit_structs`).
 - Tests use `std::sync::Mutex` for DB URL serialization across async tests — annotate with `#[allow(clippy::await_holding_lock)]`.
+- `zeroize` 1.x has no blanket `Zeroize` impl for `HashMap<K, V>` — `#[derive(ZeroizeOnDrop)]` on a struct carrying `HashMap<String, String>` fails to compile. Use a manual `impl Drop` iterating `values_mut().zeroize()` (see `vault-core/src/provider.rs`).
+- `Zeroizing<String>` derefs to `&str` for most call sites, but `HeaderValue::from(&secret)` fails with `From<&Zeroizing<String>>` unimplemented — pass `secret.as_str()` explicitly at HTTP-header boundaries.
+- `SecretStore::get` returns `Zeroizing<String>`, not `String`. Callers that need a plain `String` clone via `(*value).clone()` so the new copy still drops into whatever wipe-on-drop wrapper its destination uses.
+- `vault_policy::lease::issue_lease` takes `ttl_minutes: std::num::NonZeroU32`, not `i64`. Compile-time constants use `NonZeroU32::new(60).expect("60 is nonzero")`; CLI-parsed input must be validated at the parser boundary.
+- Monetary cost split brain: `UsageEvent.estimated_cost_micros: Option<i64>` is the internal/DB type; external JSON (`/v1/stats/providers`, `ProviderStats`) preserves the `estimated_cost_usd: f64` field name for backward compat via `CAST(SUM(...) AS REAL) / 1000000.0` at the SQL boundary.
+- DB backup convention before destructive migrations: `cp .local/vault.db .local/vault.db.pre-<NNNN>.bak`. `.local/` is gitignored so backups stay local.
 - Implementation plans live in `docs/plans/` — check there before starting new work.
