@@ -98,10 +98,10 @@
 
 ## 17. Commit
 
-- [ ] 17.1 Single atomic commit: `docs(uat): add release-gate UAT checklist and first-pass run`
-- [ ] 17.2 `git push origin main`
+- [x] 17.1 Single atomic commit: `docs(uat): add release-gate UAT checklist and first-pass run`
+- [x] 17.2 `git push origin main`
 
 ## 18. Close the loop
 
-- [ ] 18.1 All tasks above checked
-- [ ] 18.2 Archive via `/opsx:archive add-uat-release-gate` — spec sync promotes `uat-release-gate` into `openspec/specs/` and appends the UAT-step requirement into `openspec/specs/release-process/spec.md`
+- [x] 18.1 All tasks above checked
+- [x] 18.2 Archive via `/opsx:archive add-uat-release-gate` — spec sync promotes `uat-release-gate` into `openspec/specs/` and appends the UAT-step requirement into `openspec/specs/release-process/spec.md`
