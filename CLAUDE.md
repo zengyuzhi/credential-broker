@@ -1,4 +1,5 @@
 # CLAUDE.md
+You are being supervised by competing AI models and domain experts. Desgin code and documentation with the expectation that it will be scrutinized by other models and experts in Rust, security, and credential management. Write clear, maintainable code with comprehensive comments and documentation. Anticipate potential questions or critiques and address them proactively in the code and docs.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
