@@ -28,6 +28,14 @@ cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
 
 > **Note**: This project's binary is named `vault`. It is unrelated to HashiCorp Vault — this is a local-only credential broker for coding agents.
 
+> **macOS Gatekeeper**: the released binary is unsigned. If macOS refuses to run it with a "cannot be verified" dialog, strip the quarantine attribute once:
+> ```bash
+> xattr -d com.apple.quarantine ~/.local/bin/vault
+> ```
+> Code signing + notarization is on the [roadmap](./docs/ROADMAP.md).
+
+Release history lives in [CHANGELOG.md](./CHANGELOG.md).
+
 ## Quick Start
 
 ```bash
@@ -231,6 +239,8 @@ Requires:
 - Rust stable toolchain (edition 2024)
 - macOS (for Keychain integration)
 
+Cutting a release: see [docs/RELEASE.md](./docs/RELEASE.md).
+
 ## Security Model
 
 - Secrets are stored in macOS Keychain with trusted-application ACLs, not in files
@@ -240,6 +250,10 @@ Requires:
 - Leases are time-bounded (default 60 minutes) with blake3-hashed tokens
 - Production credentials are blocked by default unless `allow_prod` is explicitly set
 - Dashboard uses PIN-based auth with per-session CSRF tokens and strict CORS
+
+## Roadmap
+
+Post-v0.1.0 candidate work (Linux port, code signing, Homebrew tap, more provider adapters, token-budget policies, and more) is parked in [docs/ROADMAP.md](./docs/ROADMAP.md). Nothing there is committed — it's a reference, not a plan.
 
 ## License
 
