@@ -1,4 +1,4 @@
-use vault_db::Store;
+use vault_db::{Store, query, query_as, query_scalar};
 
 #[tokio::test]
 async fn connect_should_open_sqlite_database() {
@@ -6,11 +6,11 @@ async fn connect_should_open_sqlite_database() {
     let db_url = format!("sqlite:{}", dir.path().join("test.db").display());
 
     let store = Store::connect(&db_url).await.expect("connect store");
-    let row: (i64,) = sqlx::query_as("select 1")
+    let row: (i64,) = query_as("select 1")
         .fetch_one(&store.pool)
         .await
         .expect("select 1");
-    let credentials_table: Option<String> = sqlx::query_scalar(
+    let credentials_table: Option<String> = query_scalar(
         "select name from sqlite_master where type = 'table' and name = 'credentials'",
     )
     .fetch_optional(&store.pool)
@@ -28,7 +28,7 @@ async fn connect_creates_parent_directory_and_enforces_foreign_keys() {
     let db_url = format!("sqlite:{}", db_path.display());
 
     let store = Store::connect(&db_url).await.expect("connect store");
-    let foreign_key_error = sqlx::query(
+    let foreign_key_error = query(
         "insert into credential_fields (credential_id, field_name, value_ref) values (?1, ?2, ?3)",
     )
     .bind("missing-credential")
@@ -49,7 +49,7 @@ async fn connect_supports_triple_slash_sqlite_urls_for_absolute_paths() {
     let db_url = format!("sqlite://{}", db_path.display());
 
     let store = Store::connect(&db_url).await.expect("connect store");
-    let count: i64 = sqlx::query_scalar(
+    let count: i64 = query_scalar(
         "select count(*) from sqlite_master where type = 'table' and name = 'credentials'",
     )
     .fetch_one(&store.pool)
@@ -65,7 +65,7 @@ async fn connect_supports_in_memory_databases() {
     let store = Store::connect("sqlite::memory:")
         .await
         .expect("connect in-memory store");
-    let count: i64 = sqlx::query_scalar(
+    let count: i64 = query_scalar(
         "select count(*) from sqlite_master where type = 'table' and name = 'credentials'",
     )
     .fetch_one(&store.pool)

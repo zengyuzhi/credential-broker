@@ -2,7 +2,7 @@
 
 Maintainer-facing guide for cutting a credential-broker release. Audience: the author. Cadence: as-needed.
 
-The goal is a boring release: run the checklist top-to-bottom, push a tag, verify the artifacts, move on. If any step is surprising, update this document afterwards.
+The goal is a boring release: run the checklist top-to-bottom, push a tag, let CI draft the release artifacts, sign the checksum manifest locally, publish, verify, move on. If any step is surprising, update this document afterwards.
 
 ---
 
@@ -138,17 +138,42 @@ git tag -a vX.Y.Z -m "Release X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-The tag push is the point of no return for that version number. See [Rollback](#rollback) if something goes wrong after this.
+The tag push creates an **unsigned draft** GitHub Release. CI publishes the two tarballs plus `SHA256SUMS`, but the release must stay draft until the local signing step completes. See [Rollback](#rollback) if something goes wrong after this.
+
+## Signing flow
+
+This repository currently uses the lightest-weight maintainer setup: a local minisign secret key file at `~/.minisign/vault.key` on the release machine. If you later move the key elsewhere, export `MINISIGN_SECRET_KEY=/path/to/key` before running the helper.
+
+After the tag-triggered workflow finishes:
+
+1. Open the draft release for `vX.Y.Z` on GitHub and confirm it exists.
+2. Run the maintainer signing helper locally:
+   ```bash
+   ./scripts/sign-release.sh vX.Y.Z
+   ```
+3. The script must:
+   - download `SHA256SUMS` from the draft release
+   - sign it locally with `~/.minisign/vault.key`
+   - upload `SHA256SUMS.minisig`
+   - verify the signature locally against `crates/vault-cli/release-pubkey.minisign`
+   - append `signed by minisign key \`RWQjSf1Hgz33cGQ+jv/tnwd0/puGVn1N1Xw0wddNdPRL7L2w4avYdVMt\`` to the release body if absent
+   - promote the draft release to public
+
+If any step fails, stop there. Do not publish manually without a verified `SHA256SUMS.minisig`.
 
 ## Verify
 
-1. **Actions tab.** Go to `https://github.com/zengyuzhi/credential-broker/actions` and watch the `Release` workflow triggered by the tag. All three jobs (`test`, `build` matrix × 2, `release`) must complete green.
+1. **Actions tab.** Go to `https://github.com/zengyuzhi/credential-broker/actions` and watch the `Release` workflow triggered by the tag. All three jobs (`test`, `build` matrix × 2, `release`) must complete green. Then confirm the `Verify Release Assets` workflow passes after the draft is promoted.
 
-2. **Release assets.** Open `https://github.com/zengyuzhi/credential-broker/releases/tag/vX.Y.Z` and confirm exactly two tarballs are attached:
+2. **Release assets.** Open `https://github.com/zengyuzhi/credential-broker/releases/tag/vX.Y.Z` and confirm these assets are attached:
    - `vault-aarch64-apple-darwin.tar.gz`
    - `vault-x86_64-apple-darwin.tar.gz`
+   - `SHA256SUMS`
+   - `SHA256SUMS.minisig`
 
-3. **Release notes.** The workflow auto-generates commit-level notes. Edit the release and prepend the `## [X.Y.Z]` section from `CHANGELOG.md` above the auto-generated block. For pre-1.0 releases, also paste the macOS quarantine workaround:
+3. **Release notes.** The workflow auto-generates commit-level notes. Edit the release and prepend the `## [X.Y.Z]` section from `CHANGELOG.md` above the auto-generated block if needed. Confirm the body also contains:
+   - `signed by minisign key \`RWQjSf1Hgz33cGQ+jv/tnwd0/puGVn1N1Xw0wddNdPRL7L2w4avYdVMt\``
+   For pre-1.0 releases, also paste the macOS quarantine workaround:
    > If macOS Gatekeeper refuses to run the binary: `xattr -d com.apple.quarantine ~/.local/bin/vault`
 
 4. **Install script end-to-end.** In a scratch shell with a clean `$PATH`:
@@ -176,7 +201,7 @@ Fix the root cause, commit, and restart the "Cut the release" section.
 
 ### Case B: Failure after an artifact was uploaded (or might have been downloaded)
 
-Once a tarball has been publicly reachable, caches (user machines, CI, CDNs) may have it. Reusing the tag creates two artifacts with the same version — a debugging landmine.
+Once a tarball or signed checksum has been publicly reachable, caches (user machines, CI, CDNs) may have it. Reusing the tag creates two artifacts with the same version — a debugging landmine.
 
 Bump the patch version and re-release instead:
 
@@ -190,6 +215,15 @@ git tag -d vX.Y.Z                        # remove the local tag
 ```
 
 Add a one-line note to `CHANGELOG.md` under the new version: "Re-release of X.Y.Z; previous tarball withdrawn due to <reason>."
+
+## Key rotation
+
+If the release-signing key ever needs to rotate:
+
+1. Generate a new minisign keypair locally. Keep the new private key offline; do not upload it to CI.
+2. Commit the new public key to `crates/vault-cli/release-pubkey.minisign`.
+3. Ship one release signed by the **old** key that embeds the **new** public key, so existing binaries can trust the transition.
+4. After that release is published and verified, destroy the old private key and update this document with the new key ID.
 
 ## Retrospective
 

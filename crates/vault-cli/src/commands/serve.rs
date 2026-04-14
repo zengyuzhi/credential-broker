@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
 
-use crate::support::config::current_database_url;
+use crate::support::config::{current_database_url, state_dir};
 
 const DEFAULT_PORT: u16 = 8765;
 
@@ -35,25 +35,52 @@ pub enum ServeAction {
 // ---------------------------------------------------------------------------
 
 fn pid_file_path() -> PathBuf {
-    PathBuf::from(".local/vault.pid")
+    state_dir().join("vault.pid")
 }
 
-fn read_pid() -> Option<u32> {
-    let path = pid_file_path();
-    fs::read_to_string(&path).ok()?.trim().parse().ok()
+fn legacy_pid_file_path() -> Option<PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .map(|current_dir| current_dir.join(".local/vault.pid"))
 }
 
-fn write_pid(pid: u32) -> anyhow::Result<()> {
+fn read_pid_from_path(path: &PathBuf) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn active_pid_path() -> Option<PathBuf> {
+    let canonical = pid_file_path();
+    if canonical.is_file() {
+        return Some(canonical);
+    }
+
+    let legacy = legacy_pid_file_path()?;
+    legacy.is_file().then_some(legacy)
+}
+
+fn read_pid() -> Option<(u32, PathBuf)> {
+    let path = active_pid_path()?;
+    let pid = read_pid_from_path(&path)?;
+    Some((pid, path))
+}
+
+fn write_pid(pid: u32) -> anyhow::Result<PathBuf> {
     let path = pid_file_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(&path, pid.to_string())?;
-    Ok(())
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(path)
 }
 
-fn remove_pid_file() {
-    let _ = fs::remove_file(pid_file_path());
+fn remove_pid_file(path: &PathBuf) {
+    let _ = fs::remove_file(path);
 }
 
 fn is_process_alive(pid: u32) -> bool {
@@ -66,6 +93,16 @@ fn is_process_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+pub fn running_background_server_pid() -> Option<u32> {
+    let (pid, path) = read_pid()?;
+    if is_process_alive(pid) {
+        return Some(pid);
+    }
+
+    remove_pid_file(&path);
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Background spawn
 // ---------------------------------------------------------------------------
@@ -75,13 +112,13 @@ fn is_process_alive(pid: u32) -> bool {
 /// existing PID is returned without spawning a second instance.
 pub fn spawn_background_server(port: u16) -> anyhow::Result<u32> {
     // Check for an existing running instance.
-    if let Some(pid) = read_pid() {
+    if let Some((pid, path)) = read_pid() {
         if is_process_alive(pid) {
             eprintln!("Vault server is already running (pid: {})", pid);
             return Ok(pid);
         }
         // Stale PID file — clean it up before re-spawning.
-        remove_pid_file();
+        remove_pid_file(&path);
     }
 
     let exe = std::env::current_exe().context("failed to get current executable path")?;
@@ -139,14 +176,14 @@ pub async fn wait_for_health(port: u16, timeout_secs: u64) -> bool {
 pub async fn run_serve_command(cmd: ServeCommand) -> anyhow::Result<()> {
     match cmd.action {
         Some(ServeAction::Stop) => match read_pid() {
-            Some(pid) if is_process_alive(pid) => {
+            Some((pid, path)) if is_process_alive(pid) => {
                 let _ = Command::new("kill").arg(pid.to_string()).status();
-                remove_pid_file();
+                remove_pid_file(&path);
                 eprintln!("Vault server stopped (pid: {})", pid);
                 Ok(())
             }
-            Some(_pid) => {
-                remove_pid_file();
+            Some((_pid, path)) => {
+                remove_pid_file(&path);
                 eprintln!("Vault server is not running (stale PID file removed)");
                 Ok(())
             }
@@ -157,12 +194,12 @@ pub async fn run_serve_command(cmd: ServeCommand) -> anyhow::Result<()> {
         },
 
         Some(ServeAction::Status) => match read_pid() {
-            Some(pid) if is_process_alive(pid) => {
+            Some((pid, _path)) if is_process_alive(pid) => {
                 eprintln!("Vault server is running (pid: {}, port: {})", pid, cmd.port);
                 Ok(())
             }
-            Some(_) => {
-                remove_pid_file();
+            Some((_pid, path)) => {
+                remove_pid_file(&path);
                 eprintln!("Vault server is not running (stale PID file cleaned up)");
                 Ok(())
             }

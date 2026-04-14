@@ -23,7 +23,8 @@ clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls", "macros", "chrono", "uuid"] }
+sqlx-core = { version = "=0.8.6", default-features = false, features = ["_rt-tokio", "_tls-rustls-ring-webpki", "chrono", "uuid", "migrate"] }
+sqlx-sqlite = { version = "=0.8.6", default-features = false, features = ["chrono", "uuid", "migrate", "bundled"] }
 rand = "0.8"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }

@@ -36,6 +36,21 @@ cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
 
 Release history lives in [CHANGELOG.md](./CHANGELOG.md).
 
+## Upgrading
+
+`vault` can self-update from GitHub Releases on macOS:
+
+```bash
+vault upgrade --check
+vault upgrade --dry-run
+vault upgrade
+```
+
+- `vault upgrade --check` only compares your installed version with the latest release.
+- `vault upgrade --dry-run` runs the release lookup, signature verification, checksum verification, and extraction steps without replacing the current binary.
+- `vault upgrade` refuses to run while a background `vault serve` daemon is active; stop it first with `vault serve stop`, then restart it after the upgrade.
+- Downgrades and same-version reinstalls are blocked by default. Use `vault upgrade --to <version> --force` only when you explicitly want that rollback path.
+
 ## Quick Start
 
 ```bash
@@ -210,9 +225,9 @@ vault-cli (binary, includes vault serve)
 ## Data Storage
 
 - **Secrets**: macOS Keychain (never in files or database)
-- **Metadata**: SQLite at `.local/vault.db` (credentials, profiles, bindings, leases, usage events, UI sessions)
-- **PID file**: `.local/vault.pid` (background server process tracking)
-- **Override**: Set `VAULT_DATABASE_URL` to use a different SQLite path
+- **Metadata**: SQLite in the workspace state directory by default (`/path/to/credential-broker/.local/vault.db`)
+- **PID file**: stored next to the active database as `<state-dir>/vault.pid`
+- **Override**: set `VAULT_DATABASE_URL` to move both the SQLite file and the state directory that holds `vault.pid`
 
 Migrations are auto-applied on first connection.
 
@@ -220,7 +235,7 @@ Migrations are auto-applied on first connection.
 
 | Variable | Purpose |
 |----------|---------|
-| `VAULT_DATABASE_URL` | Override SQLite path (default: `.local/vault.db`) |
+| `VAULT_DATABASE_URL` | Override SQLite path (default: workspace `.local/vault.db`; `vault.pid` follows the same parent directory) |
 | `VAULT_DEBUG_RUN` | Set to `1` for debug logging in `vault run` |
 | `VAULT_TRUSTED_APP_PATHS` | Colon-separated extra executable paths for Keychain ACL recovery |
 
@@ -228,7 +243,7 @@ Migrations are auto-applied on first connection.
 
 ```bash
 cargo build                          # build all crates
-cargo test                           # run all tests (73 tests)
+cargo test                           # run all tests
 cargo clippy --workspace --all-targets -- -D warnings  # lint
 cargo fmt --all                      # format
 cargo run -p vault-cli -- <subcmd>   # run CLI

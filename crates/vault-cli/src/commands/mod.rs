@@ -4,3 +4,4 @@ pub mod run;
 pub mod serve;
 pub mod stats;
 pub mod ui;
+pub mod upgrade;

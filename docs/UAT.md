@@ -285,9 +285,9 @@ renumberable.
 #### UAT-SERVE-001 — serve --background starts and stops cleanly
 - **Type:** `[AUTO:CI]`
 - **Cap:** vault-serve-lifecycle
-- **Preconditions:** no existing `.local/vault.pid`
-- **Cmd:** `vault serve --background && sleep 1 && vault serve status && vault serve stop && test ! -e .local/vault.pid`
-- **Pass:** exit 0 AND `status` output contains `running` AND `.local/vault.pid` absent after stop
+- **Preconditions:** no existing background server; isolated state dir
+- **Cmd:** `state="$(mktemp -d)" && export VAULT_DATABASE_URL="sqlite:${state}/vault.db?mode=rwc" && vault serve --background && sleep 1 && vault serve status && vault serve stop && test ! -e "${state}/vault.pid"`
+- **Pass:** exit 0 AND `status` output contains `running` AND `${state}/vault.pid` absent after stop
 - **AI-safe:** no — background state straddles tool calls
 
 #### UAT-SERVE-002 — /health returns 200 while serving
@@ -307,6 +307,14 @@ renumberable.
   2. Observe: server start log line, PIN printed to stdout, browser tab opens to dashboard login
 - **Pass:** all three observations occur within 2s of invocation; PIN is 6 digits; browser lands on login page
 - **AI-safe:** no
+
+#### UAT-SERVE-004 — serve status and stop work from a different cwd
+- **Type:** `[AUTO:CI]`
+- **Cap:** vault-serve-lifecycle
+- **Preconditions:** isolated state dir plus two scratch working directories
+- **Cmd:** `state="$(mktemp -d)" && cwd1="$(mktemp -d)" && cwd2="$(mktemp -d)" && export VAULT_DATABASE_URL="sqlite:${state}/vault.db?mode=rwc" && (cd "$cwd1" && vault serve --background --port 39101) && (cd "$cwd2" && vault serve --port 39101 status && vault serve --port 39101 stop) && test ! -e "${state}/vault.pid"`
+- **Pass:** exit 0 AND `status` output contains `running` AND stop succeeds even though the daemon was started from a different working directory
+- **AI-safe:** no — background state straddles tool calls
 
 ### Proxy (paid-gated)
 
@@ -370,6 +378,28 @@ renumberable.
 - **Pass:** stdout contains `estimated_cost_micros INTEGER` AND does NOT contain `estimated_cost_usd`
 - **AI-safe:** yes
 
+### Upgrade
+
+#### UAT-UPG-001 — vault upgrade replaces an older direct-install binary
+- **Type:** `[MANUAL:SHELL]`
+- **Cap:** vault-upgrade
+- **Preconditions:** at least two published GitHub releases exist; no background `vault serve` daemon running; scratch temp directory available
+- **Steps:**
+  1. Create a scratch bin dir and prepend it to `PATH`: `scratch="$(mktemp -d)" && mkdir -p "$scratch/bin" && export PATH="$scratch/bin:$PATH"`
+  2. Download and extract an older published release tarball into `$scratch/bin/vault` (for your macOS architecture), then `chmod +x "$scratch/bin/vault"`
+  3. Confirm the starting version: `vault --version`
+  4. Run `vault upgrade`
+  5. Confirm the upgraded version: `vault --version`
+- **Pass:** step 3 reports the older version, step 4 succeeds, and step 5 reports the newest published version without changing the executable path away from `$scratch/bin/vault`
+- **AI-safe:** no — downloads real release assets and mutates a scratch install
+
+#### UAT-UPG-002 — vault upgrade rejects a tampered minisign signature
+- **Type:** `[AUTO:ANY]`
+- **Cap:** vault-upgrade
+- **Cmd:** `cargo test -p vault-cli --test upgrade_local_fixtures upgrade_should_fail_on_signature_mismatch_without_mutating_binary -- --exact`
+- **Pass:** output contains `test result: ok` AND does NOT contain `FAILED`
+- **AI-safe:** yes
+
 ### Security regression
 
 #### UAT-SEC-001 — CSRF header mismatch rejects mutating request
@@ -419,7 +449,7 @@ actually does, end-to-end.
 profile, and proves `vault run` injects.
 
 ### Existing user, new release upgrade
-`UAT-MIGRATE-001` → `UAT-MIGRATE-002` → `UAT-CLI-001` → `UAT-SEC-002`
+`UAT-MIGRATE-001` → `UAT-MIGRATE-002` → `UAT-UPG-001` → `UAT-CLI-001` → `UAT-SEC-002`
 — an existing user's DB migrates cleanly, the new binary reports its
 version, regression tests pass.
 

@@ -1,0 +1,54 @@
+name: Verify Release Assets
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-assets-verify.yml"
+      - "crates/vault-cli/Cargo.toml"
+      - "crates/vault-cli/build.rs"
+      - "crates/vault-cli/release-pubkey.minisign"
+      - "scripts/sign-release.sh"
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify-release-config:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build vault-cli
+        run: cargo build -p vault-cli
+      - name: Validate signing helper syntax
+        run: bash -n scripts/sign-release.sh
+
+  verify-published-assets:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+      - name: Verify signed checksum assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          gh release download "$TAG" --repo "$REPO" --pattern SHA256SUMS --pattern SHA256SUMS.minisig --dir "$tmpdir"
+          test -s "$tmpdir/SHA256SUMS"
+          test -s "$tmpdir/SHA256SUMS.minisig"
+          minisign -Vm "$tmpdir/SHA256SUMS" -p crates/vault-cli/release-pubkey.minisign -x "$tmpdir/SHA256SUMS.minisig"

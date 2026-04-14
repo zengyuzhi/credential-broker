@@ -1,4 +1,9 @@
 mod codec;
+mod sqlx_compat;
+
+pub use sqlx_compat::{Row, SqlitePool, migrate, query, query_as, query_scalar, sqlite};
+
+extern crate self as sqlx;
 
 pub mod bindings;
 pub mod credentials;

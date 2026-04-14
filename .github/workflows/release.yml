@@ -54,7 +54,7 @@ jobs:
           path: vault-${{ matrix.target }}.tar.gz
 
   release:
-    name: Create GitHub Release
+    name: Create Draft GitHub Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -66,8 +66,14 @@ jobs:
         with:
           merge-multiple: true
 
-      - name: Create release
+      - name: Generate checksum manifest
+        run: sha256sum vault-*.tar.gz > SHA256SUMS
+
+      - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           generate_release_notes: true
-          files: vault-*.tar.gz
+          files: |
+            vault-*.tar.gz
+            SHA256SUMS

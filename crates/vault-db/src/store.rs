@@ -1,17 +1,46 @@
 use std::{
+    borrow::Cow,
     fs,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::LazyLock,
 };
 
 use anyhow::Context;
 use sqlx::{
     SqlitePool,
-    migrate::Migrator,
+    migrate::{Migration, MigrationType, Migrator},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 
-static MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
+static MIGRATOR: LazyLock<Migrator> = LazyLock::new(|| Migrator {
+    migrations: Cow::Owned(vec![
+        Migration::new(
+            1,
+            Cow::Borrowed("init"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!("../../../migrations/0001_init.sql")),
+            false,
+        ),
+        Migration::new(
+            2,
+            Cow::Borrowed("ui sessions"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!("../../../migrations/0002_ui_sessions.sql")),
+            false,
+        ),
+        Migration::new(
+            3,
+            Cow::Borrowed("usage events cost micros"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!(
+                "../../../migrations/0003_usage_events_cost_micros.sql"
+            )),
+            false,
+        ),
+    ]),
+    ..Migrator::DEFAULT
+});
 
 #[derive(Clone)]
 pub struct Store {

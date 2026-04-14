@@ -16,6 +16,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
+minisign-verify = "=0.2.5"
 reqwest.workspace = true
 rpassword = "7"
 serde.workspace = true
@@ -35,3 +36,6 @@ vaultd = { path = "../vaultd" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[build-dependencies]
+minisign-verify = "=0.2.5"

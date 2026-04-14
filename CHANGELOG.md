@@ -11,6 +11,11 @@ User-visible bullets live here; implementation detail lives in `git log`.
 
 ### Added
 
+- **`vault upgrade` self-update command** for macOS installs managed directly from GitHub Releases.
+  - `vault upgrade --check` reports whether a newer release is available without downloading artifacts.
+  - `vault upgrade --dry-run` performs release lookup, minisign verification, checksum validation, and extraction without replacing the installed binary.
+  - `vault upgrade` refuses to run while a background `vault serve` daemon is active and blocks downgrades unless you explicitly opt in with `--to <version> --force`.
+
 ### Changed
 
 ### Deprecated
@@ -22,6 +27,8 @@ User-visible bullets live here; implementation detail lives in `git log`.
 - `vault --version` / `vault -V` now report the version. v0.1.0 documentation advertised the flag but clap wasn't wired up for it (`#[command(version)]` missing). Install-script end-to-end smoke test caught the gap.
 
 ### Security
+
+- **Release artifacts now require minisign provenance.** The release workflow creates a draft release with tarballs plus `SHA256SUMS`; the maintainer signs `SHA256SUMS` locally with the checked-in public key embedded into `vault`, uploads `SHA256SUMS.minisig`, and only then publishes the release.
 
 - **Secret-memory wipe via `zeroize`** — API keys, lease tokens, and session tokens are now held in `Zeroizing<String>` at their primary allocation sites so the heap bytes are overwritten on drop rather than lingering until the allocator reuses the pages. `ResolvedCredential.fields` wipes on drop via a custom `Drop` impl. Covers audit findings ZA-0001..0007 + SE-05. Added workspace dep `zeroize = "1"`.
 - **Lease `ttl_minutes` validated at the type boundary** — `issue_lease` now accepts `NonZeroU32` instead of `i64`, rejecting zero, negative, and oversized values at construction time rather than silently producing immediately-expired or panicking leases. (Audit SE-07.)
