@@ -38,7 +38,7 @@
 - [x] 5.5 `vault --help` reviewed — all 6 subcommands (credential, profile, run, stats, ui, serve) present and documented; no drift vs README Quick Start
 - [x] 5.6 `crates/vault-cli/Cargo.toml` confirmed at `version = "0.1.0"`
 - [x] 5.7 CHANGELOG v0.1.0 section dated `2026-04-14`
-- [ ] 5.8 Stage and commit: `git add CHANGELOG.md docs/RELEASE.md docs/ROADMAP.md README.md && git commit -m "docs: add CHANGELOG, release procedure, and roadmap for v0.1.0"`
+- [x] 5.8 Committed as 3 commits on `main`: `03b2267` (archive + spec sync), `d49c363` (style: cargo fmt), `a7d20ce` (docs: CHANGELOG/RELEASE/ROADMAP + README links + OpenSpec change). Fmt was split from docs commit since it touched source files unrelated to the release narrative.
 
 ## 6. Cut the tag
 
