@@ -54,11 +54,10 @@ impl Store {
     }
 
     pub async fn count_active_leases(&self) -> Result<i64> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM leases WHERE expires_at > datetime('now')",
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM leases WHERE expires_at > datetime('now')")
+                .fetch_one(&self.pool)
+                .await?;
         Ok(count)
     }
 

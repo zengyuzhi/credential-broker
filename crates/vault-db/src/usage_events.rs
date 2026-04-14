@@ -151,10 +151,9 @@ impl Store {
 
     /// Return the MAX(created_at) timestamp across all usage events, for SSE change detection.
     pub async fn max_usage_event_time(&self) -> Result<Option<String>> {
-        let result: Option<String> =
-            sqlx::query_scalar("SELECT MAX(created_at) FROM usage_events")
-                .fetch_one(&self.pool)
-                .await?;
+        let result: Option<String> = sqlx::query_scalar("SELECT MAX(created_at) FROM usage_events")
+            .fetch_one(&self.pool)
+            .await?;
         Ok(result)
     }
 

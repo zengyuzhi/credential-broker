@@ -77,7 +77,10 @@ mod tests {
         let _guard = test_database_lock().lock().expect("test lock");
         let _dir = setup_test_db();
 
-        let cmd = StatsCommand { provider: None, json: false };
+        let cmd = StatsCommand {
+            provider: None,
+            json: false,
+        };
         run_stats_command(cmd).await.expect("stats should succeed");
 
         clear_test_database_url();
@@ -141,7 +144,10 @@ mod tests {
             .expect("insert usage event");
 
         // Run stats with no filter — should print the openai row.
-        let cmd = StatsCommand { provider: None, json: false };
+        let cmd = StatsCommand {
+            provider: None,
+            json: false,
+        };
         run_stats_command(cmd).await.expect("stats should succeed");
 
         // Run stats with a provider filter that matches.

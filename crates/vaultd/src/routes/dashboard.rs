@@ -10,7 +10,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::{validate_csrf, AuthSession};
+use crate::auth::{AuthSession, validate_csrf};
 
 #[derive(Template)]
 #[template(path = "home.html")]
@@ -385,8 +385,12 @@ pub async fn toggle_credential(
 ) -> Result<Response, (StatusCode, String)> {
     validate_csrf(&headers, &auth.session)?;
 
-    let uuid = Uuid::parse_str(&id)
-        .map_err(|_| (StatusCode::BAD_REQUEST, format!("invalid credential id: {id}")))?;
+    let uuid = Uuid::parse_str(&id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("invalid credential id: {id}"),
+        )
+    })?;
 
     let store = &state.store;
 
@@ -424,9 +428,16 @@ pub async fn toggle_credential(
                 "failed to reload credential".to_string(),
             )
         })?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("credential {id} not found after toggle")))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("credential {id} not found after toggle"),
+            )
+        })?;
 
-    let tmpl = CredentialRowTemplate { credential: updated };
+    let tmpl = CredentialRowTemplate {
+        credential: updated,
+    };
 
     tmpl.render()
         .map(|html| Html(html).into_response())

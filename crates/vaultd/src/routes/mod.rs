@@ -21,9 +21,7 @@ use crate::static_assets::login_page;
 pub fn router(state: AppState) -> Router {
     // CORS: restrict to loopback origin only.
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::exact(
-            "http://127.0.0.1:8765".parse().unwrap(),
-        ))
+        .allow_origin(AllowOrigin::exact("http://127.0.0.1:8765".parse().unwrap()))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([header::CONTENT_TYPE, header::COOKIE])
         .allow_credentials(true);

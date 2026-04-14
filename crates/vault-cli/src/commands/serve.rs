@@ -99,7 +99,9 @@ pub fn spawn_background_server(port: u16) -> anyhow::Result<u32> {
         cmd.process_group(0);
     }
 
-    let child = cmd.spawn().context("failed to spawn vault server process")?;
+    let child = cmd
+        .spawn()
+        .context("failed to spawn vault server process")?;
     let pid = child.id();
 
     write_pid(pid)?;
@@ -136,46 +138,39 @@ pub async fn wait_for_health(port: u16, timeout_secs: u64) -> bool {
 
 pub async fn run_serve_command(cmd: ServeCommand) -> anyhow::Result<()> {
     match cmd.action {
-        Some(ServeAction::Stop) => {
-            match read_pid() {
-                Some(pid) if is_process_alive(pid) => {
-                    let _ = Command::new("kill").arg(pid.to_string()).status();
-                    remove_pid_file();
-                    eprintln!("Vault server stopped (pid: {})", pid);
-                    Ok(())
-                }
-                Some(_pid) => {
-                    remove_pid_file();
-                    eprintln!("Vault server is not running (stale PID file removed)");
-                    Ok(())
-                }
-                None => {
-                    eprintln!("Vault server is not running");
-                    Ok(())
-                }
+        Some(ServeAction::Stop) => match read_pid() {
+            Some(pid) if is_process_alive(pid) => {
+                let _ = Command::new("kill").arg(pid.to_string()).status();
+                remove_pid_file();
+                eprintln!("Vault server stopped (pid: {})", pid);
+                Ok(())
             }
-        }
+            Some(_pid) => {
+                remove_pid_file();
+                eprintln!("Vault server is not running (stale PID file removed)");
+                Ok(())
+            }
+            None => {
+                eprintln!("Vault server is not running");
+                Ok(())
+            }
+        },
 
-        Some(ServeAction::Status) => {
-            match read_pid() {
-                Some(pid) if is_process_alive(pid) => {
-                    eprintln!(
-                        "Vault server is running (pid: {}, port: {})",
-                        pid, cmd.port
-                    );
-                    Ok(())
-                }
-                Some(_) => {
-                    remove_pid_file();
-                    eprintln!("Vault server is not running (stale PID file cleaned up)");
-                    Ok(())
-                }
-                None => {
-                    eprintln!("Vault server is not running");
-                    Ok(())
-                }
+        Some(ServeAction::Status) => match read_pid() {
+            Some(pid) if is_process_alive(pid) => {
+                eprintln!("Vault server is running (pid: {}, port: {})", pid, cmd.port);
+                Ok(())
             }
-        }
+            Some(_) => {
+                remove_pid_file();
+                eprintln!("Vault server is not running (stale PID file cleaned up)");
+                Ok(())
+            }
+            None => {
+                eprintln!("Vault server is not running");
+                Ok(())
+            }
+        },
 
         None => {
             if cmd.background {
