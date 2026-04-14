@@ -57,5 +57,5 @@
 
 ## 8. Close the loop
 
-- [ ] 8.1 Archive this OpenSpec change via `/opsx:archive ship-v0-1-0` so `release-process` enters `openspec/specs/`
-- [ ] 8.2 Append a retrospective note to `docs/RELEASE.md` (1-3 bullets) capturing anything surprising about the first cut — feeds the next release's checklist
+- [x] 8.1 Archived to `openspec/changes/archive/2026-04-14-ship-v0-1-0/`; `release-process` synced to `openspec/specs/release-process/`
+- [x] 8.2 Retro appended to `docs/RELEASE.md` (commit `5990f12`): pre-tag gate earned its keep, `--version` gap caught post-tag, Node 20 deprecation, ~6min workflow budget
