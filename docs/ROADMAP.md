@@ -14,6 +14,12 @@ Things plausibly happening in the next one or two releases.
 - **`xattr` quarantine hint in README install section** `S` — document the workaround inline rather than only in release notes so first-time users find it.
 - **Bump GitHub Actions to v5 when available** `S` — `actions/checkout@v4` and `actions/upload-artifact@v4` run on Node 20, which is forced to Node 24 in June 2026 and removed September 2026. Surfaced by v0.1.0 release workflow annotation.
 - **Add `cargo-audit` to CI** `S` — RustSec advisory DB scan on `Cargo.lock`; catches public CVEs in the dep tree. Trail-of-Bits flavored; reviewed during v0.1.0 shipping.
+- **Adopt `zeroize` across secret paths** `L` — API keys live in `String` / `Vec<u8>` and drop without wiping. Wrap `SecretStore::get` return in `Zeroizing<String>`; derive `ZeroizeOnDrop` on `ResolvedCredential` + lease raw token + dashboard session token. Covers ZA-0001..0005, ZA-0006, ZA-0007, SE-05. (audit: zeroize-audit + sharp-edges 2026-04-14)
+- **Validate `ttl_minutes` in `issue_lease`** `S` — switch to `NonZeroU32` or return `Result` on zero/negative. (audit: sharp-edges 2026-04-14 SE-07)
+- **Return error on timestamp overflow** `S` — stop silently substituting `now` in `checked_add_signed` fallbacks in `auth.rs` and `ui_sessions.rs`; callers should handle the failure. (audit: sharp-edges 2026-04-14 SE-06)
+- **Sanitize `VAULT_TRUSTED_APP_PATHS` entries** `S` — require absolute path + file-existence check before passing to `/usr/bin/security`. (audit: sharp-edges 2026-04-14 SE-11)
+- **Disambiguate missing-vs-empty header extraction** `S` — current code `unwrap_or("")` on Origin and auth header values, conflating absent with empty. Return 401 on absent, distinct from mismatch. (audit: sharp-edges 2026-04-14 SE-12)
+- **Saturate `u128 as i64` latency cast** `S` — use `try_from` with `.unwrap_or(i64::MAX)` in proxy telemetry. (audit: sharp-edges 2026-04-14 SE-08)
 
 ## Medium-term
 
@@ -25,6 +31,9 @@ Things that would take a clear chunk of work and might or might not happen this 
 - **Full proxy adapters for OpenRouter, Tavily, CoinGecko** `M` — current code supports inject + basic forwarding; promote these to full adapters with response parsing for usage tracking.
 - **Token-budget policies** `M` — per-profile monthly spend ceiling; `vault run` refuses to launch if the profile is over budget. Data already in `vault-telemetry`.
 - **Dashboard search / filtering across all pages** `S` — text filter on Credentials, Profiles, Sessions; extend the Stats provider filter pattern.
+- **Migrate off archived `askama` fork** `L` — current pins `askama = "0.12"` + `askama_axum = "0.4"` target `djc/askama` which is archived upstream. Move to `askama-rs/askama` or `rinja`. Non-trivial because the specific `askama_axum 0.4` pin is there to bridge the axum 0.8 incompat (see `CLAUDE.md` gotcha). (audit: supply-chain-risk-auditor 2026-04-14 SC-01)
+- **Switch `estimated_cost_usd` from f64 to integer microdollars** `M` — floating-point accumulates drift across thousands of rollup rows; use `i64` microdollars and document the unit. (audit: sharp-edges 2026-04-14 SE-09)
+- **Evaluate `keyring` as `security-framework` alternative** `M` — cross-platform abstraction that'd help the Linux port while shrinking the solo-maintained-FFI surface. (audit: supply-chain-risk-auditor 2026-04-14 SC-03)
 
 ## Speculative
 
@@ -37,6 +46,8 @@ Longer-shot ideas. Listed so they stop reappearing in conversation. Promotion to
 - **Automatic release drafting from conventional commits** `M` — once commit discipline is established (it isn't), switch CHANGELOG generation to `git-cliff` or `release-plz`.
 - **Encrypted audit log export** `M` — dump `usage_events` for a date range as an age-encrypted bundle for cold storage.
 - **Provider cost prediction** `M` — pre-flight estimate of a request's cost shown in the dashboard before the agent sends it.
+- **Monitor solo-maintained crate risk** `S` (recurring) — `reqwest`, `rpassword` each have one primary maintainer. Re-evaluate replacement if maintenance cadence degrades. Pair with supply-chain re-audit each release. (audit: supply-chain-risk-auditor 2026-04-14 SC-02, SC-04)
+- **Validate `secret_ref` service prefix** `S` — `parse` currently discards the service half of `"service:account"`, so a malformed ref with the wrong service is treated as valid. Either round-trip-check or drop the prefix. (audit: sharp-edges 2026-04-14 SE-10)
 
 ---
 

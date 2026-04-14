@@ -23,6 +23,12 @@ User-visible bullets live here; implementation detail lives in `git log`.
 
 ### Security
 
+- **Constant-time PIN hash comparison** — dashboard PIN verification previously compared `String` values, leaking timing information that could defeat the 5-attempt burn. Now uses `subtle::ConstantTimeEq`. Added workspace dep `subtle = "2"`. (Audit finding SE-01 CRITICAL, Trail of Bits sharp-edges 2026-04-14.)
+- **Constant-time CSRF token comparison** — same timing leak applied to the session CSRF token; empty-token guard ran after the compare. Reordered and switched to `ConstantTimeEq`. (SE-02 HIGH.)
+- **Rate-limit key no longer spoofable** — the PIN challenge rate limiter keyed on `x-forwarded-for` with `host` fallback, both client-controlled. A local process rotating headers could get unlimited PIN attempts. Since vaultd binds to `127.0.0.1` only, rate limiting now uses a fixed server-side key. (SE-03 HIGH.)
+- **Removed dangerous default `SecretStore::put`** — the trait exposed an `put` method that stored secrets with no Keychain ACL; any app on the system could read them. No production code called it, but its presence invited future misuse. The sole supported write path is now `MacOsKeychainStore::put_with_access` (trusted-app ACL required). (SE-04 HIGH.)
+- Full baseline report: `docs/audits/2026-04-14-tob-baseline/SUMMARY.md`. 16 additional findings triaged to `docs/ROADMAP.md`; 6 accepted.
+
 ## [0.1.0] - 2026-04-14
 
 Initial personal release. macOS-only. Unsigned.

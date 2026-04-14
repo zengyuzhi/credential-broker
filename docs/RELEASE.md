@@ -36,7 +36,42 @@ Run every item. If any fails, stop, fix, and restart from the top.
    ```
    Expect zero output.
 
-4. **CHANGELOG current.**
+4. **Security audit pass.**
+   Re-run the Trail of Bits audit trio and compare against the previous baseline.
+   Invoke each skill from a Claude Code session:
+
+   - `zeroize-audit@trailofbits/skills`
+   - `supply-chain-risk-auditor@trailofbits/skills`
+   - `sharp-edges@trailofbits/skills`
+
+   Create a new dated baseline directory following the `security-audit-baseline` convention:
+   ```
+   docs/audits/<YYYY-MM-DD>-<slug>/
+   ```
+   Populate with one per-skill file (provenance header + raw output) plus a `SUMMARY.md`
+   that assigns severity (CRITICAL/HIGH/MEDIUM/LOW/INFO) and disposition
+   (Fix now / Triage / Accept) per finding. Update `docs/audits/README.md` "Latest baseline"
+   pointer in the same commit. Full rules live in
+   [`../audits/README.md`](../audits/README.md) and the archived
+   `openspec/specs/security-audit-baseline/spec.md`.
+
+   **Gate decision (comparative, not absolute):**
+   - If any CRITICAL or HIGH finding is **new** relative to the previous baseline → stop.
+     Fix, Triage, or Accept (with rationale) the new finding before continuing.
+   - If the new baseline is equal-or-lower risk versus prior (same findings or fewer, or
+     same count at lower severities) → step passes.
+   - A first-ever baseline has no prior to compare against; unresolved `Fix now`
+     CRITICAL/HIGH items block archive per the capability spec.
+
+   **Skip exception:** docs-only releases (no Rust source diff since the prior baseline)
+   may skip re-running the trio. Record the skip in the Retrospective section below with
+   the phrase "Security audit skipped: no code delta since `<prior-baseline-path>`".
+
+   **Partial results:** if one skill errors/stalls, commit the partial output and flag the
+   gap in `SUMMARY.md` under "Incomplete scans". Gate only uses findings that completed.
+   If no skill completed, the step fails.
+
+5. **CHANGELOG current.**
    - Open `CHANGELOG.md`.
    - Move everything under `## [Unreleased]` into a new section: `## [X.Y.Z] - YYYY-MM-DD` (today, UTC).
    - Re-create an empty `## [Unreleased]` block with empty `### Added / Changed / ... / Security` subsections at the top.
@@ -44,7 +79,7 @@ Run every item. If any fails, stop, fix, and restart from the top.
    - Update the compare-URL footer: add a `[X.Y.Z]: .../releases/tag/vX.Y.Z` line and update `[Unreleased]: .../compare/vX.Y.Z...HEAD`.
    - If `## [Unreleased]` was empty before you started, stop and audit `git log` against the last tag — something got missed.
 
-5. **`vault --help` sanity check.**
+6. **`vault --help` sanity check.**
    ```bash
    cargo run -p vault-cli -- --help
    cargo run -p vault-cli -- run --help
@@ -52,18 +87,18 @@ Run every item. If any fails, stop, fix, and restart from the top.
    ```
    Visually diff against README snippets. If drift exists, either update README or add a follow-up task. Drift alone does **not** block the release.
 
-6. **Version bump.**
+7. **Version bump.**
    - Edit `crates/vault-cli/Cargo.toml`: set `version = "X.Y.Z"`.
    - Run `cargo check -p vault-cli` to refresh `Cargo.lock`.
    - For the v0.1.0 initial release only: no bump needed (already at `0.1.0`).
 
-7. **Working tree clean.**
+8. **Working tree clean.**
    ```bash
    git status
    ```
    After staging the CHANGELOG + version bump commit, expect `nothing to commit, working tree clean` before tagging.
 
-8. **On `main` and up to date.**
+9. **On `main` and up to date.**
    ```bash
    git rev-parse --abbrev-ref HEAD    # must print "main"
    git pull --ff-only origin main
@@ -143,6 +178,16 @@ After each release, append 1-3 bullets here noting anything surprising. Next rel
 - **Post-tag install-script smoke test surfaced a clap gap.** `vault --version` wasn't wired up (`#[command(version)]` missing), even though README / CHANGELOG / release body all advertise the flag. Binary itself works; only the documented version probe fails. Not a binary recall. Fix went into `[Unreleased] → Fixed` and will ship in v0.1.1. **Add `vault --version` to step 5 (help sanity check) for next release — not just as a README cross-check.**
 - **GitHub Actions Node.js 20 deprecation warning.** `actions/checkout@v4` and `actions/upload-artifact@v4` run on Node 20, forced to Node 24 in June 2026. Non-blocking now; add "bump actions to v5 when available" to the roadmap's Near-term bucket.
 - **Workflow total time: ~6 min end-to-end.** test (3m) → build matrix in parallel (2-3m each) → release (10s). Good budget; no need for build splits yet.
+
+### Baseline audits
+
+#### 2026-04-14 — Trail of Bits trio (first baseline)
+
+- **26 findings across 3 skills.** `SUMMARY.md` at `docs/audits/2026-04-14-tob-baseline/SUMMARY.md`. Counts: 1 CRITICAL, 9 HIGH, 8 MEDIUM, 5 LOW, 3 INFO. Dispositions: 4 Fix-now (CRITICAL + 3 HIGH), 16 Triage, 6 Accept.
+- **Value proven on the first pass.** The CRITICAL (non-CT PIN compare) and a HIGH (rate-limit keyed on a spoofable header) were real security-affecting defects in shipped v0.1.0 code. Without the trio they'd have sat in place until a user noticed or an external audit happened. One-shot, caught two.
+- **Zeroize adoption is the biggest remaining work item.** Five HIGH findings (ZA-0001..0005) + SE-05 all point to the same root cause: no `zeroize` crate anywhere. Triaged as a standalone change (`add-zeroize-to-secret-paths`) rather than inlined — proper zeroize wiring touches every crate that handles secrets and deserves its own design doc.
+- **Askama fork is archived.** Supply-chain scanner flagged `askama 0.12` / `askama_axum 0.4` upstream as archived. Migration is Medium-term; the current pin is there to bridge an axum 0.8 compat gap so replacing it is architecture, not renaming.
+- **Scanner interactive-only.** None of the three skills run headlessly in CI today. The release-checklist step (4) is necessarily human-driven. A future change should investigate CLI-wrapper versions that'd fit in GitHub Actions.
 
 ---
 
