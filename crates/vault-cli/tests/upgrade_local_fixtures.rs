@@ -117,7 +117,7 @@ fn upgrade_dry_run_should_verify_fixture_release_without_mutating_binary() {
         scratch.path(),
         &fixtures.join("SHA256SUMS.minisig"),
         &fixtures.join(FIXTURE_ASSET_NAME),
-        "v0.1.1",
+        "v0.1.2",
     );
 
     let output = run_upgrade(
@@ -133,7 +133,7 @@ fn upgrade_dry_run_should_verify_fixture_release_without_mutating_binary() {
         combined_output(&output)
     );
     assert!(
-        combined_output(&output).contains("would upgrade 0.1.0"),
+        combined_output(&output).contains("would upgrade 0.1.1"),
         "expected dry-run output, got: {}",
         combined_output(&output)
     );
@@ -160,7 +160,7 @@ fn upgrade_should_fail_on_signature_mismatch_without_mutating_binary() {
         scratch.path(),
         &tampered_signature,
         &fixtures.join(FIXTURE_ASSET_NAME),
-        "v0.1.1",
+        "v0.1.2",
     );
 
     let output = run_upgrade(
@@ -200,7 +200,7 @@ fn upgrade_should_fail_on_checksum_mismatch_without_mutating_binary() {
         scratch.path(),
         &fixtures.join("SHA256SUMS.minisig"),
         &tampered_tarball,
-        "v0.1.1",
+        "v0.1.2",
     );
 
     let output = run_upgrade(
@@ -268,7 +268,7 @@ fn upgrade_should_ignore_and_delete_a_stale_pid_file() {
         scratch.path(),
         &fixtures.join("SHA256SUMS.minisig"),
         &fixtures.join(FIXTURE_ASSET_NAME),
-        "v0.1.1",
+        "v0.1.2",
     );
     let pid_path = write_pid_file(&state_root, 999_999);
 
@@ -280,7 +280,7 @@ fn upgrade_should_ignore_and_delete_a_stale_pid_file() {
         combined_output(&output)
     );
     assert!(
-        combined_output(&output).contains("update available: 0.1.0 → 0.1.1"),
+        combined_output(&output).contains("update available: 0.1.1 → 0.1.2"),
         "expected upgrade check output, got: {}",
         combined_output(&output)
     );
