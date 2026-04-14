@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use security_framework::os::macos::keychain::SecKeychain;
 use security_framework::passwords::{delete_generic_password, get_generic_password};
 use tokio::io::AsyncWriteExt;
 use zeroize::Zeroizing;
@@ -138,8 +137,20 @@ impl MacOsKeychainStore {
 #[async_trait]
 impl SecretStore for MacOsKeychainStore {
     async fn get(&self, service: &str, account: &str) -> anyhow::Result<Zeroizing<String>> {
-        let _interaction_lock = SecKeychain::disable_user_interaction()
-            .context("failed to disable macOS keychain user interaction")?;
+        // NOTE: a prior hardening pass wrapped this read in
+        // `SecKeychain::disable_user_interaction()` to make background reads fail
+        // loudly rather than silently prompt. On macOS 15 + security-framework 3.7,
+        // that call causes `errSecAuthFailed` ("user name or passphrase not
+        // correct") even for items whose ACL permits silent access by the calling
+        // binary (confirmed via UAT-CLI-004 baseline run, 2026-04-14; regression
+        // registered as UAT-FIND-001). The guard was removed here until a
+        // non-regressing replacement exists (reading via `SecItemCopyMatching`
+        // with `kSecUseAuthenticationUINone`). The `audit-hardening` spec
+        // carries the current behavior as a documented known gap under the
+        // "Keychain read path silent-failure invariant" requirement; the
+        // follow-up `keychain-acl-rewrite` change will reinstate the
+        // invariant and REMOVE that requirement. Regression guard:
+        // UAT-SEC-004 in docs/UAT.md.
         // `get_generic_password` returns `Vec<u8>` owned by us; wrap in
         // `Zeroizing` so the intermediate byte buffer is wiped on drop even
         // if `from_utf8` fails. Audit ZA-0001.

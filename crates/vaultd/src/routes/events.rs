@@ -20,7 +20,10 @@ use crate::auth::AuthSession;
 /// Watermarks for detecting cross-process changes.
 struct Watermarks {
     last_event_at: String,
-    credential_count: usize,
+    // Monotonic MAX(updated_at) over the credentials table, not a row count.
+    // Row-count watermarks are blind to in-place mutations such as
+    // `vault credential disable` — see UAT-FIND-005.
+    credential_updated_at: String,
     active_lease_count: i64,
 }
 
@@ -39,7 +42,7 @@ pub async fn events_handler(
     let stream = async_stream::stream! {
         let mut wm = Watermarks {
             last_event_at: fetch_max_event_time(&store).await,
-            credential_count: fetch_credential_count(&store).await,
+            credential_updated_at: fetch_max_credential_updated_at(&store).await,
             active_lease_count: fetch_active_lease_count(&store).await,
         };
 
@@ -55,10 +58,12 @@ pub async fn events_handler(
                 yield Ok(Event::default().event("stats").data("updated"));
             }
 
-            // Check credential count change (add / remove / toggle).
-            let new_cred_count = fetch_credential_count(&store).await;
-            if new_cred_count != wm.credential_count {
-                wm.credential_count = new_cred_count;
+            // Check credential state change (add / remove / enable / disable / rename).
+            // Uses MAX(updated_at) so in-place toggles — not just row-count deltas —
+            // advance the marker (UAT-FIND-005).
+            let new_cred_mark = fetch_max_credential_updated_at(&store).await;
+            if new_cred_mark != wm.credential_updated_at {
+                wm.credential_updated_at = new_cred_mark;
                 yield Ok(Event::default().event("credential").data("updated"));
             }
 
@@ -82,8 +87,12 @@ async fn fetch_max_event_time(store: &vault_db::Store) -> String {
         .unwrap_or_default()
 }
 
-async fn fetch_credential_count(store: &vault_db::Store) -> usize {
-    store.list_credentials().await.map(|v| v.len()).unwrap_or(0)
+async fn fetch_max_credential_updated_at(store: &vault_db::Store) -> String {
+    store
+        .max_credential_updated_at()
+        .await
+        .unwrap_or(None)
+        .unwrap_or_default()
 }
 
 async fn fetch_active_lease_count(store: &vault_db::Store) -> i64 {

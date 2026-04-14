@@ -83,6 +83,17 @@ impl Store {
             .await?;
         Ok(())
     }
+
+    // Monotonic marker used by the dashboard SSE loop to detect cross-process
+    // credential mutations (enable / disable / rename) that do not change the
+    // row count — the blind spot UAT-FIND-005 exposed.
+    pub async fn max_credential_updated_at(&self) -> Result<Option<String>> {
+        let result: Option<String> =
+            sqlx::query_scalar("SELECT MAX(updated_at) FROM credentials")
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(result)
+    }
 }
 
 fn map_credential_row(row: sqlx::sqlite::SqliteRow) -> Result<Credential> {

@@ -10,12 +10,47 @@
     <style>
         .vault-layout { display: flex; min-height: 100vh; }
         .vault-nav {
-            width: 200px; padding: 1rem;
+            width: 220px;
+            padding: 1.25rem 0.75rem;
             border-right: 1px solid var(--pico-muted-border-color);
+            flex-shrink: 0;
         }
-        .vault-nav ul { margin: 0; padding: 0; list-style: none; }
-        .vault-nav li { padding: 0.25rem 0; }
-        .vault-nav a[aria-current="page"] { font-weight: 700; }
+        /* Override Pico's `nav ul { display: flex }` default, which collapses a vertical sidebar. */
+        .vault-nav ul {
+            display: block;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .vault-nav li {
+            display: block;
+            padding: 0;
+        }
+        .vault-nav > ul:first-child {
+            margin-bottom: 0.5rem;
+            padding: 0.25rem 0.75rem 0.75rem;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+            font-size: 1.05rem;
+            letter-spacing: 0.01em;
+        }
+        .vault-nav a {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            margin: 0.125rem 0;
+            border-radius: 0.375rem;
+            color: var(--pico-color);
+            text-decoration: none;
+            transition: background-color 120ms ease-out;
+        }
+        .vault-nav a:hover {
+            background: color-mix(in oklch, var(--pico-muted-border-color) 50%, transparent);
+            text-decoration: none;
+        }
+        .vault-nav a[aria-current="page"] {
+            background: color-mix(in oklch, var(--pico-primary) 12%, transparent);
+            color: var(--pico-primary);
+            font-weight: 600;
+        }
         .vault-main { flex: 1; padding: 2rem; }
         .vault-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; color: var(--pico-color); }
         .vault-topbar { display: none; }
@@ -140,10 +175,31 @@
                 hideBanner();
             };
 
-            ['stats', 'credential', 'lease'].forEach(function(evt) {
-                es.addEventListener(evt, function() {
-                    htmx.ajax('GET', window.location.pathname, {target: 'main', swap: 'innerHTML'});
-                });
+            // Swap only `<main>`'s inner content, extracted from the
+            // server's full-document response. Previously used
+            // `htmx.ajax(…{target:'main', swap:'innerHTML'})`, which
+            // dumped the entire returned `<html>` tree — nav, topbar
+            // and all — inside `<main>`, producing a duplicated nav
+            // after every SSE event. (Rare before UAT-FIND-005 was
+            // fixed, because `credential` only fired on add/remove;
+            // visible on every toggle now.)
+            function refreshMain() {
+                fetch(window.location.pathname, { headers: { 'Accept': 'text/html' } })
+                    .then(function (r) { return r.text(); })
+                    .then(function (html) {
+                        var doc = new DOMParser().parseFromString(html, 'text/html');
+                        var nextMain = doc.querySelector('main.vault-main');
+                        var curMain = document.querySelector('main.vault-main');
+                        if (nextMain && curMain) {
+                            curMain.innerHTML = nextMain.innerHTML;
+                            if (window.htmx) htmx.process(curMain);
+                            formatTimestamps();
+                        }
+                    })
+                    .catch(function () { /* swallow — next tick will retry */ });
+            }
+            ['stats', 'credential', 'lease'].forEach(function (evt) {
+                es.addEventListener(evt, refreshMain);
             });
 
             es.onerror = function() {

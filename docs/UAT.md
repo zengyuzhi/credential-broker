@@ -397,6 +397,15 @@ renumberable.
 - **Pass:** stdout is exactly `no matches`
 - **AI-safe:** yes
 
+#### UAT-SEC-004 — Keychain read path silent-failure regression guard
+- **Type:** `[AUTO:ANY]`
+- **Cap:** audit-hardening (UAT-FIND-001 regression guard)
+- **Pre:** an `uat-profile` exists bound to an OpenAI credential whose Keychain item is seeded with `-A` (allow-all) ACL and a non-empty value — seed via `UAT-CLI-002` + `UAT-CLI-003` if absent.
+- **Cmd:** `vault run --profile uat-profile --agent uat-sec-004 -- env | grep '^OPENAI_API_KEY='`
+- **Pass:** stdout matches regex `OPENAI_API_KEY=\S+` (non-empty value injected)
+- **Fails when:** `SecKeychain::disable_user_interaction()` or any equivalent guard is re-introduced in `SecretStore::get` — the command then prints `failed to load secret … The user name or passphrase you entered is not correct.` and exits non-zero.
+- **AI-safe:** yes
+
 ---
 
 ## Persona journeys
@@ -424,6 +433,17 @@ AND the golden path is 4/4 PASS. A failed journey is a release blocker
 even if aggregate thresholds pass.
 
 ---
+
+## Findings registry
+
+Defects, regressions, and ancillary findings surfaced by UAT runs accumulate in
+[`docs/uat-runs/FINDINGS.md`](uat-runs/FINDINGS.md) — a rolling, append-only
+registry keyed by `UAT-FIND-NNN`. Every `FAIL` in a run-log produces at least
+one entry. Entries carry status (`Open` / `Fixed` / `Accepted`), fix-commit
+refs, and cross-link back to the originating run-log. Gate decisions in
+[`RELEASE.md`](RELEASE.md) may cite `Open` / `Fixed` counts from the registry
+the same way the audit gate cites the severity table in
+`docs/audits/<baseline>/SUMMARY.md`.
 
 ## Run-log template
 
