@@ -77,7 +77,8 @@ pub struct UsageEvent {
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub total_tokens: Option<i64>,
-    pub estimated_cost_usd: Option<f64>,
+    /// Cost in integer microdollars (1 microdollar = $0.000001). Audit SE-09.
+    pub estimated_cost_micros: Option<i64>,
     pub status_code: Option<i64>,
     pub success: bool,
     pub latency_ms: i64,

@@ -6,4 +6,6 @@ pub enum VaultError {
     UnsupportedProvider(String),
     #[error("missing credential field: {0}")]
     MissingCredentialField(&'static str),
+    #[error("timestamp arithmetic overflow in {0}")]
+    TimestampOverflow(&'static str),
 }

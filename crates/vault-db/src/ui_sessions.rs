@@ -81,9 +81,11 @@ impl Store {
         session_token_hash: &str,
         csrf_token: &str,
     ) -> Result<()> {
+        // Propagate timestamp overflow rather than silently collapsing to
+        // `now`, which produced an immediately-expired session. Audit SE-06.
         let new_expires_at = Utc::now()
             .checked_add_signed(Duration::hours(4))
-            .unwrap_or_else(Utc::now);
+            .ok_or_else(|| anyhow::anyhow!("session expires_at timestamp overflow"))?;
 
         sqlx::query(
             r#"

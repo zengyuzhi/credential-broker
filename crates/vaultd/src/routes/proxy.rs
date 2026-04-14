@@ -12,6 +12,7 @@ use vault_policy::lease::hash_token;
 use vault_providers::adapter_for;
 use vault_secrets::KEYCHAIN_SERVICE_NAME;
 use vault_telemetry::writer::TelemetryWriter;
+use zeroize::Zeroizing;
 
 use crate::app::AppState;
 
@@ -138,9 +139,16 @@ pub async fn proxy_handler(
     // Inject provider-specific auth headers.
     req_builder = match provider.as_str() {
         "anthropic" => req_builder
-            .header("x-api-key", &secret)
+            .header("x-api-key", secret.as_str())
             .header("anthropic-version", "2023-06-01"),
-        _ => req_builder.header("authorization", format!("Bearer {secret}")),
+        _ => {
+            // Hold the `Bearer <api-key>` header value in a Zeroizing<String>
+            // so the allocation is wiped on drop once reqwest copies into its
+            // internal header map. Audit ZA-0003.
+            let auth_header: Zeroizing<String> =
+                Zeroizing::new(format!("Bearer {}", secret.as_str()));
+            req_builder.header("authorization", auth_header.as_str())
+        }
     };
 
     let start = Instant::now();
@@ -158,7 +166,9 @@ pub async fn proxy_handler(
             format!("failed to read upstream response body: {err}"),
         )
     })?;
-    let latency_ms = start.elapsed().as_millis() as i64;
+    // Saturate instead of truncate: an outlier latency above i64::MAX ms
+    // deserves a sticky max value, not a silent wrap. Audit SE-08.
+    let latency_ms = i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX);
 
     // --- 7. Parse usage ---
     let parsed = adapter.parse_usage_from_response(&path, status_code.as_u16(), &response_body);
@@ -180,7 +190,11 @@ pub async fn proxy_handler(
         prompt_tokens: parsed.prompt_tokens,
         completion_tokens: parsed.completion_tokens,
         total_tokens: parsed.total_tokens,
-        estimated_cost_usd: parsed.estimated_cost_usd,
+        // Convert adapter-supplied f64 USD → integer microdollars at the DB
+        // boundary. Audit SE-09.
+        estimated_cost_micros: parsed
+            .estimated_cost_usd
+            .map(|usd| (usd * 1_000_000.0) as i64),
         status_code: Some(status_code.as_u16() as i64),
         success: status_code.is_success(),
         latency_ms,
@@ -201,7 +215,7 @@ pub async fn proxy_handler(
 }
 
 /// Load a secret from the platform secret store, parsing the `secret_ref` format `"service:account"`.
-async fn load_secret(secret_ref: &str) -> anyhow::Result<String> {
+async fn load_secret(secret_ref: &str) -> anyhow::Result<Zeroizing<String>> {
     #[cfg(target_os = "macos")]
     {
         use vault_secrets::{MacOsKeychainStore, SecretStore};

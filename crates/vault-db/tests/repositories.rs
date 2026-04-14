@@ -218,7 +218,7 @@ fn sample_usage_event(credential_id: Uuid) -> UsageEvent {
         prompt_tokens: Some(100),
         completion_tokens: Some(200),
         total_tokens: Some(300),
-        estimated_cost_usd: Some(0.005),
+        estimated_cost_micros: Some(5_000),
         status_code: Some(200),
         success: true,
         latency_ms: 450,
@@ -288,7 +288,7 @@ async fn usage_stats_by_provider_should_aggregate_events() {
             prompt_tokens: Some(100),
             completion_tokens: Some(50),
             total_tokens: Some(150),
-            estimated_cost_usd: Some(0.01),
+            estimated_cost_micros: Some(10_000),
             ..sample_usage_event(credential.id)
         };
         test_store
@@ -318,7 +318,8 @@ async fn get_lease_by_token_hash_should_return_matching_lease() {
     let profile = sample_profile("coding");
     ts.store.insert_profile(&profile).await.unwrap();
 
-    let (lease, _raw_token) = vault_policy::lease::issue_lease(profile.id, "demo", None, 60);
+    let ttl = std::num::NonZeroU32::new(60).unwrap();
+    let (lease, _raw_token) = vault_policy::lease::issue_lease(profile.id, "demo", None, ttl);
     ts.store.insert_lease(&lease).await.unwrap();
 
     let found = ts

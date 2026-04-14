@@ -131,7 +131,7 @@ mod tests {
             prompt_tokens: Some(100),
             completion_tokens: Some(50),
             total_tokens: Some(150),
-            estimated_cost_usd: Some(0.0012),
+            estimated_cost_micros: Some(1_200),
             status_code: Some(200),
             success: true,
             latency_ms: 420,

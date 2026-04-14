@@ -8,4 +8,5 @@ anyhow.workspace = true
 blake3.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
 vault-core = { path = "../vault-core" }

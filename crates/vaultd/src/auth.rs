@@ -149,9 +149,14 @@ pub async fn challenge_handler(
     let pin_hash = hash(&pin);
 
     let now = Utc::now();
+    // Propagate timestamp overflow as 500 rather than silently collapsing to
+    // an immediately-expired challenge. Audit SE-06.
     let expires_at = now
         .checked_add_signed(chrono::Duration::seconds(CHALLENGE_EXPIRY_SECONDS))
-        .unwrap_or(now);
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "challenge expiry timestamp overflow".to_string(),
+        ))?;
 
     let session = UiSession {
         id: Uuid::new_v4().to_string(),
@@ -245,8 +250,11 @@ pub async fn login_handler(
         return Err((StatusCode::UNAUTHORIZED, "incorrect PIN".to_string()));
     }
 
-    // Generate session token and CSRF token.
-    let raw_token = Uuid::new_v4().to_string();
+    // Generate session token and CSRF token. The raw session token is held
+    // in `Zeroizing<String>` so the primary allocation is wiped on drop.
+    // Serde's response-body copy below is outside our ownership and remains
+    // a documented residual gap. Audit ZA-0005.
+    let raw_token: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(Uuid::new_v4().to_string());
     let session_token_hash = hash(&raw_token);
     let csrf_token = Uuid::new_v4().to_string();
 

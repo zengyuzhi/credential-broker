@@ -127,7 +127,10 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
         "resolved env keys: {:?}",
         env_map.keys().collect::<Vec<_>>()
     ));
-    let (lease, raw_token) = issue_lease(profile.id, &cmd.agent, cmd.project.clone(), 60);
+    // TTL is a compile-time constant for `vault run`; `NonZeroU32::new(60)`
+    // is statically known to be `Some`, so unwrap is infallible here.
+    let ttl = std::num::NonZeroU32::new(60).expect("60 is nonzero");
+    let (lease, raw_token) = issue_lease(profile.id, &cmd.agent, cmd.project.clone(), ttl);
     store.insert_lease(&lease).await?;
     debug_log(format!(
         "issued lease id={} token_len={}",
@@ -136,7 +139,10 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
     ));
     env_map.insert("VAULT_PROFILE".to_string(), cmd.profile.clone());
     env_map.insert("VAULT_AGENT".to_string(), cmd.agent.clone());
-    env_map.insert("VAULT_LEASE_TOKEN".to_string(), raw_token);
+    // Copy the lease token into the env map so the primary `Zeroizing<String>`
+    // binding wipes at end of scope; the copy in `env_map` is consumed by
+    // `Command::envs` below and not persisted.
+    env_map.insert("VAULT_LEASE_TOKEN".to_string(), (*raw_token).clone());
     if let Some(project) = &cmd.project {
         env_map.insert("VAULT_PROJECT".to_string(), project.clone());
     }
@@ -178,7 +184,7 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
             prompt_tokens: None,
             completion_tokens: None,
             total_tokens: None,
-            estimated_cost_usd: None,
+            estimated_cost_micros: None,
             status_code: status.code().map(|c| c as i64),
             success: status.success(),
             latency_ms: 0,
@@ -267,7 +273,11 @@ async fn resolve_bound_credentials(
             ResolvedCredential {
                 provider: credential.provider,
                 label: credential.label,
-                fields: HashMap::from([(field_name.to_string(), secret_value)]),
+                // Copy the inner String out of `Zeroizing<String>` into the
+                // HashMap. The source `secret_value` is wiped when dropped at
+                // end of scope; the copy in `fields` is wiped by
+                // `ResolvedCredential`'s custom Drop impl. Audit ZA-0002.
+                fields: HashMap::from([(field_name.to_string(), (*secret_value).clone())]),
             },
         ));
     }

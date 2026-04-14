@@ -28,7 +28,7 @@ impl Store {
                 id, provider, credential_id, lease_id, agent_name, project,
                 mode, operation, endpoint, model, request_count,
                 prompt_tokens, completion_tokens, total_tokens,
-                estimated_cost_usd, status_code, success, latency_ms,
+                estimated_cost_micros, status_code, success, latency_ms,
                 error_text, created_at
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6,
@@ -53,7 +53,7 @@ impl Store {
         .bind(event.prompt_tokens)
         .bind(event.completion_tokens)
         .bind(event.total_tokens)
-        .bind(event.estimated_cost_usd)
+        .bind(event.estimated_cost_micros)
         .bind(event.status_code)
         .bind(i64::from(event.success))
         .bind(event.latency_ms)
@@ -71,7 +71,7 @@ impl Store {
              COALESCE(SUM(prompt_tokens), 0) as prompt_tokens, \
              COALESCE(SUM(completion_tokens), 0) as completion_tokens, \
              COALESCE(SUM(total_tokens), 0) as total_tokens, \
-             COALESCE(SUM(estimated_cost_usd), 0.0) as estimated_cost_usd, \
+             COALESCE(CAST(SUM(estimated_cost_micros) AS REAL) / 1000000.0, 0.0) as estimated_cost_usd, \
              MAX(created_at) as last_used_at \
              FROM usage_events \
              GROUP BY provider \
@@ -102,7 +102,7 @@ impl Store {
             SELECT id, provider, credential_id, lease_id, agent_name, project,
                    mode, operation, endpoint, model, request_count,
                    prompt_tokens, completion_tokens, total_tokens,
-                   estimated_cost_usd, status_code, success, latency_ms,
+                   estimated_cost_micros, status_code, success, latency_ms,
                    error_text, created_at
             FROM usage_events
             ORDER BY created_at DESC
@@ -124,7 +124,7 @@ impl Store {
              COALESCE(SUM(prompt_tokens), 0) as prompt_tokens, \
              COALESCE(SUM(completion_tokens), 0) as completion_tokens, \
              COALESCE(SUM(total_tokens), 0) as total_tokens, \
-             COALESCE(SUM(estimated_cost_usd), 0.0) as estimated_cost_usd, \
+             COALESCE(CAST(SUM(estimated_cost_micros) AS REAL) / 1000000.0, 0.0) as estimated_cost_usd, \
              MAX(created_at) as last_used_at \
              FROM usage_events \
              WHERE provider = ?1 \
@@ -167,7 +167,7 @@ impl Store {
             "SELECT id, provider, credential_id, lease_id, agent_name, project, \
              mode, operation, endpoint, model, request_count, \
              prompt_tokens, completion_tokens, total_tokens, \
-             estimated_cost_usd, status_code, success, latency_ms, \
+             estimated_cost_micros, status_code, success, latency_ms, \
              error_text, created_at \
              FROM usage_events \
              WHERE provider = ?1 \
@@ -207,7 +207,7 @@ fn map_usage_event_row(row: sqlx::sqlite::SqliteRow) -> Result<UsageEvent> {
         prompt_tokens: row.get("prompt_tokens"),
         completion_tokens: row.get("completion_tokens"),
         total_tokens: row.get("total_tokens"),
-        estimated_cost_usd: row.get("estimated_cost_usd"),
+        estimated_cost_micros: row.get("estimated_cost_micros"),
         status_code: row.get("status_code"),
         success: row.get::<i64, _>("success") != 0,
         latency_ms: row.get("latency_ms"),

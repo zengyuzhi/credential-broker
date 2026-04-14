@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use security_framework::os::macos::keychain::SecKeychain;
 use security_framework::passwords::{delete_generic_password, get_generic_password};
 use tokio::io::AsyncWriteExt;
+use zeroize::Zeroizing;
 
 use crate::SecretStore;
 
@@ -108,9 +109,13 @@ impl MacOsKeychainStore {
             .context("failed to spawn `/usr/bin/security add-generic-password`")?;
 
         // Write the secret to stdin then close it so `security` proceeds.
+        // Copy the bytes into a `Zeroizing<Vec<u8>>` so the intermediate
+        // buffer is wiped on drop rather than lingering in heap memory after
+        // the pipe closes. Audit ZA-0007.
         if let Some(mut stdin) = child.stdin.take() {
+            let buf: Zeroizing<Vec<u8>> = Zeroizing::new(secret.as_bytes().to_vec());
             stdin
-                .write_all(secret.as_bytes())
+                .write_all(&buf)
                 .await
                 .context("failed to write secret to security stdin")?;
             stdin.shutdown().await.ok();
@@ -132,13 +137,19 @@ impl MacOsKeychainStore {
 
 #[async_trait]
 impl SecretStore for MacOsKeychainStore {
-    async fn get(&self, service: &str, account: &str) -> anyhow::Result<String> {
+    async fn get(&self, service: &str, account: &str) -> anyhow::Result<Zeroizing<String>> {
         let _interaction_lock = SecKeychain::disable_user_interaction()
             .context("failed to disable macOS keychain user interaction")?;
-        let bytes = get_generic_password(service, account)
-            .with_context(|| format!("failed to load secret for {service}/{account}"))?;
-        let secret = String::from_utf8(bytes).context("keychain secret is not valid utf-8")?;
-        Ok(secret)
+        // `get_generic_password` returns `Vec<u8>` owned by us; wrap in
+        // `Zeroizing` so the intermediate byte buffer is wiped on drop even
+        // if `from_utf8` fails. Audit ZA-0001.
+        let bytes = Zeroizing::new(
+            get_generic_password(service, account)
+                .with_context(|| format!("failed to load secret for {service}/{account}"))?,
+        );
+        let secret =
+            String::from_utf8(bytes.to_vec()).context("keychain secret is not valid utf-8")?;
+        Ok(Zeroizing::new(secret))
     }
 
     async fn delete(&self, service: &str, account: &str) -> anyhow::Result<()> {

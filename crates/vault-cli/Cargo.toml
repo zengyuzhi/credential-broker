@@ -24,6 +24,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
 vault-core = { path = "../vault-core" }
 vault-db = { path = "../vault-db" }
 vault-providers = { path = "../vault-providers" }

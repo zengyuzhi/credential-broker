@@ -23,6 +23,7 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
 vault-core = { path = "../vault-core" }
 vault-db = { path = "../vault-db" }
 vault-policy = { path = "../vault-policy" }

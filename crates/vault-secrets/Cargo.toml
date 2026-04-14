@@ -7,6 +7,7 @@ edition = "2024"
 anyhow.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
+zeroize.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
