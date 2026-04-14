@@ -108,9 +108,9 @@
 - [x] 14.1 Atomic commit `3af4386` landed: `feat(sec): adopt zeroize, validate lease TTL, saturate latency, microdollar cost` (29 files, +627 / −42)
 - [x] 14.2 CHANGELOG bullets reference finding IDs; commit SHA cross-reference via git log rather than inline per-bullet SHA (one-commit-many-bullets case)
 - [x] 14.3 Single commit covers all changes; no follow-up amend needed
-- [ ] 14.4 `git push origin main` — awaiting user confirmation before pushing
+- [x] 14.4 `git push origin main` — pushed `b36529c..e44bffc`; doc-alignment follow-up `e44bffc` included
 
 ## 15. Close the loop
 
-- [ ] 15.1 All tasks above checked
-- [ ] 15.2 Archive via `/opsx:archive harden-audit-findings` — spec sync promotes `audit-hardening` into `openspec/specs/`
+- [x] 15.1 All non-deferred tasks checked; 12.5/12.6 flagged as interactive deferrals
+- [x] 15.2 Archived to `openspec/changes/archive/2026-04-14-harden-audit-findings/`; `audit-hardening` promoted to `openspec/specs/audit-hardening/spec.md`
