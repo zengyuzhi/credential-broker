@@ -225,7 +225,7 @@ vault-cli (binary, includes vault serve)
 ## Data Storage
 
 - **Secrets**: macOS Keychain (never in files or database)
-- **Metadata**: SQLite in the workspace state directory by default (`/path/to/credential-broker/.local/vault.db`)
+- **Metadata**: SQLite in the workspace state directory for source builds (`/path/to/credential-broker/.local/vault.db`); installed binaries fall back to `~/.local/share/credential-broker/vault.db`
 - **PID file**: stored next to the active database as `<state-dir>/vault.pid`
 - **Override**: set `VAULT_DATABASE_URL` to move both the SQLite file and the state directory that holds `vault.pid`
 
@@ -235,7 +235,7 @@ Migrations are auto-applied on first connection.
 
 | Variable | Purpose |
 |----------|---------|
-| `VAULT_DATABASE_URL` | Override SQLite path (default: workspace `.local/vault.db`; `vault.pid` follows the same parent directory) |
+| `VAULT_DATABASE_URL` | Override SQLite path (default: source builds use workspace `.local/vault.db`, installed binaries use `~/.local/share/credential-broker/vault.db`; `vault.pid` follows the same parent directory) |
 | `VAULT_DEBUG_RUN` | Set to `1` for debug logging in `vault run` |
 | `VAULT_TRUSTED_APP_PATHS` | Colon-separated extra executable paths for Keychain ACL recovery |
 

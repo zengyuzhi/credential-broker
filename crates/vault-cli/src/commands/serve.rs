@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
 
-use crate::support::config::{current_database_url, state_dir};
+use crate::support::config::{current_database_url, resolved_state_dir, state_dir};
 
 const DEFAULT_PORT: u16 = 8765;
 
@@ -35,7 +35,7 @@ pub enum ServeAction {
 // ---------------------------------------------------------------------------
 
 fn pid_file_path() -> PathBuf {
-    state_dir().join("vault.pid")
+    resolved_state_dir().join("vault.pid")
 }
 
 fn legacy_pid_file_path() -> Option<PathBuf> {
@@ -65,7 +65,7 @@ fn read_pid() -> Option<(u32, PathBuf)> {
 }
 
 fn write_pid(pid: u32) -> anyhow::Result<PathBuf> {
-    let path = pid_file_path();
+    let path = state_dir().join("vault.pid");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

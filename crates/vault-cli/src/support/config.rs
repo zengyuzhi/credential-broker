@@ -18,15 +18,31 @@ fn workspace_root() -> PathBuf {
         .expect("vault-cli should live under <workspace>/crates/vault-cli")
 }
 
-fn workspace_local_dir() -> PathBuf {
-    workspace_root().join(".local")
+fn installed_state_dir(home_dir: &Path) -> PathBuf {
+    home_dir
+        .join(".local")
+        .join("share")
+        .join("credential-broker")
+}
+
+fn default_state_dir_from(workspace_root: &Path, home_dir: Option<&Path>) -> PathBuf {
+    if workspace_root.exists() {
+        return workspace_root.join(".local");
+    }
+
+    home_dir
+        .map(installed_state_dir)
+        .unwrap_or_else(|| workspace_root.join(".local"))
+}
+
+fn default_state_dir() -> PathBuf {
+    let workspace = workspace_root();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    default_state_dir_from(&workspace, home.as_deref())
 }
 
 fn default_database_url() -> String {
-    format!(
-        "sqlite:{}",
-        workspace_local_dir().join("vault.db").display()
-    )
+    format!("sqlite:{}", default_state_dir().join("vault.db").display())
 }
 
 fn sqlite_path_from_url(database_url: &str) -> Option<PathBuf> {
@@ -52,11 +68,15 @@ fn set_mode(path: &Path, mode: u32) {
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) {}
 
-pub fn state_dir() -> PathBuf {
-    let resolved = sqlite_path_from_url(&current_database_url())
+pub fn resolved_state_dir() -> PathBuf {
+    sqlite_path_from_url(&current_database_url())
         .and_then(|path| path.parent().map(PathBuf::from))
         .filter(|path| path.is_absolute())
-        .unwrap_or_else(workspace_local_dir);
+        .unwrap_or_else(default_state_dir)
+}
+
+pub fn state_dir() -> PathBuf {
+    let resolved = resolved_state_dir();
 
     fs::create_dir_all(&resolved).expect("create state directory");
     set_mode(&resolved, 0o700);
@@ -97,8 +117,8 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        clear_test_database_url, default_database_url, set_test_database_url, state_dir,
-        test_database_lock,
+        clear_test_database_url, default_database_url, default_state_dir_from,
+        set_test_database_url, state_dir, test_database_lock,
     };
 
     #[test]
@@ -108,6 +128,22 @@ mod tests {
         assert!(database_url.ends_with("/.local/vault.db"));
         assert!(database_url.contains("/credential-broker/"));
         assert!(!database_url.contains("crates/vault-cli/.local/vault.db"));
+    }
+
+    #[test]
+    fn default_state_dir_should_use_home_owned_path_when_workspace_is_missing() {
+        let home = TempDir::new().expect("tempdir");
+        let missing_workspace = home.path().join("missing-workspace");
+
+        let resolved = default_state_dir_from(&missing_workspace, Some(home.path()));
+
+        assert_eq!(
+            resolved,
+            home.path()
+                .join(".local")
+                .join("share")
+                .join("credential-broker")
+        );
     }
 
     #[test]
