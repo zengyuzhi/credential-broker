@@ -35,6 +35,7 @@ cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
 > Code signing + notarization is on the [roadmap](./docs/ROADMAP.md).
 
 Release history lives in [CHANGELOG.md](./CHANGELOG.md).
+The long-term product direction and design principles live in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Upgrading
 
@@ -221,6 +222,9 @@ vault-cli (binary, includes vault serve)
 | `vault-policy` | Lease issuance (UUID + blake3 hash) and environment policy enforcement |
 | `vault-telemetry` | Usage event recording and rollup queries |
 | `vaultd` | Axum HTTP server: dashboard pages, auth, SSE, proxy routes (now a library crate) |
+
+This describes the current implementation layout.
+For the higher-level product direction, trust boundary, and target model of brokered capabilities over raw secret injection, see [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Data Storage
 
