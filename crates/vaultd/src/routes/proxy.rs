@@ -10,7 +10,7 @@ use uuid::Uuid;
 use vault_core::models::{AccessMode, UsageEvent};
 use vault_policy::lease::hash_token;
 use vault_providers::adapter_for;
-use vault_secrets::KEYCHAIN_SERVICE_NAME;
+use vault_secrets::parse_secret_ref;
 use vault_telemetry::writer::TelemetryWriter;
 use zeroize::Zeroizing;
 
@@ -220,12 +220,10 @@ async fn load_secret(secret_ref: &str) -> anyhow::Result<Zeroizing<String>> {
     {
         use vault_secrets::{MacOsKeychainStore, SecretStore};
 
-        let (_service, account) = secret_ref
-            .split_once(':')
-            .ok_or_else(|| anyhow::anyhow!("invalid secret_ref format: {secret_ref}"))?;
+        let (service, account) = parse_secret_ref(secret_ref)?;
 
         let store = MacOsKeychainStore;
-        let secret = store.get(KEYCHAIN_SERVICE_NAME, account).await?;
+        let secret = store.get(service, account).await?;
         Ok(secret)
     }
 

@@ -6,7 +6,10 @@ use vault_db::Store;
 use vault_policy::service::PolicyService;
 use vault_providers::schema_for;
 
-use crate::support::{config::current_database_url, prompt::print_success};
+use crate::support::{
+    config::current_database_url, keychain_migration::migrate_legacy_credentials_in_store,
+    prompt::print_success,
+};
 
 #[derive(Debug, Args)]
 #[command(about = "Create and manage named profiles that bundle provider credentials")]
@@ -24,7 +27,7 @@ pub enum ProfileSubcommand {
     },
     #[command(about = "List all profiles")]
     List,
-    #[command(about = "Bind a credential to a profile for a specific provider")]
+    #[command(about = "Bind a credential to a profile for a provider and access mode")]
     Bind {
         #[arg(help = "Profile name to bind to")]
         profile: String,
@@ -35,7 +38,7 @@ pub enum ProfileSubcommand {
         #[arg(
             long,
             default_value = "either",
-            help = "Access mode: inject (env vars), proxy (HTTP forwarding), or either"
+            help = "Access mode: inject (compatibility env vars), proxy (preferred brokered HTTP forwarding when supported), or either (mixed transitional mode)"
         )]
         mode: String,
     },
@@ -47,6 +50,9 @@ pub enum ProfileSubcommand {
 }
 
 pub async fn run_profile_command(cmd: ProfileCommand) -> anyhow::Result<()> {
+    let store = Store::connect(&current_database_url()).await?;
+    let _ = migrate_legacy_credentials_in_store(&store).await?;
+
     match cmd.command {
         ProfileSubcommand::Create { name } => {
             let output = create_profile(&name).await?;
@@ -291,7 +297,7 @@ mod tests {
             provider: "twitterapi".to_string(),
             kind: CredentialKind::ApiKey,
             label: "social-main".to_string(),
-            secret_ref: "ai.zyr1.vault:credential:test:api_key".to_string(),
+            secret_ref: "dev.credential-broker.vault:credential:test:api_key".to_string(),
             environment: "work".to_string(),
             owner: None,
             enabled: true,

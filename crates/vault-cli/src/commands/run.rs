@@ -10,9 +10,12 @@ use vault_core::{
 use vault_db::Store;
 use vault_policy::lease::issue_lease;
 use vault_providers::adapter_for;
-use vault_secrets::{KEYCHAIN_SERVICE_NAME, SecretStore};
+use vault_secrets::{SecretStore, parse_secret_ref};
 
-use crate::support::{config::current_database_url, prompt::print_success};
+use crate::support::{
+    config::current_database_url, keychain_migration::migrate_legacy_credentials_in_store,
+    prompt::print_success,
+};
 
 fn debug_enabled() -> bool {
     matches!(
@@ -66,7 +69,14 @@ pub(crate) fn explain_keychain_read_error(message: &str) -> String {
 }
 
 #[derive(Debug, Args)]
-#[command(about = "Launch a command with credentials injected from a profile")]
+#[command(
+    about = "Launch a command with profile credentials via env injection (compatibility path)"
+)]
+#[command(
+    long_about = "Use this when a tool still expects env injection into the child-process \
+    environment. `vault run` remains supported for compatibility, but brokered access through \
+    the local vault is the preferred path when a tool can use it."
+)]
 pub struct RunCommand {
     #[arg(long, help = "Profile name whose bindings supply credentials")]
     pub profile: String,
@@ -100,6 +110,7 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
     ));
 
     let store = Store::connect(&database_url).await?;
+    let _ = migrate_legacy_credentials_in_store(&store).await?;
     let profile = store
         .get_profile_by_name(&cmd.profile)
         .await?
@@ -230,30 +241,27 @@ async fn resolve_bound_credentials(
             .get_credential(binding.credential_id)
             .await?
             .with_context(|| format!("missing credential for binding {}", binding.id))?;
-        let (_service, account) = parse_secret_ref(&credential.secret_ref)?;
+        let (service, account) = parse_secret_ref(&credential.secret_ref)?;
         debug_log(format!(
-            "resolving binding id={} provider={} credential_id={} mode={:?} account={}",
-            binding.id, binding.provider, credential.id, binding.mode, account
+            "resolving binding id={} provider={} credential_id={} mode={:?} service={} account={}",
+            binding.id, binding.provider, credential.id, binding.mode, service, account
         ));
 
         #[cfg(target_os = "macos")]
         let secret_value = {
             debug_log(format!(
                 "reading macOS keychain service={} account={}",
-                KEYCHAIN_SERVICE_NAME, account
+                service, account
             ));
-            let value = keychain
-                .get(KEYCHAIN_SERVICE_NAME, &account)
-                .await
-                .map_err(|err| {
-                    let raw = err.to_string();
-                    let enhanced = explain_keychain_read_error(&raw);
-                    if enhanced != raw {
-                        anyhow::anyhow!("{}", enhanced)
-                    } else {
-                        err
-                    }
-                })?;
+            let value = keychain.get(service, account).await.map_err(|err| {
+                let raw = err.to_string();
+                let enhanced = explain_keychain_read_error(&raw);
+                if enhanced != raw {
+                    anyhow::anyhow!("{}", enhanced)
+                } else {
+                    err
+                }
+            })?;
             debug_log(format!(
                 "loaded keychain secret for credential_id={}",
                 credential.id,
@@ -290,13 +298,6 @@ fn infer_field_name(provider: &str) -> &'static str {
         "github" => "token",
         _ => "api_key",
     }
-}
-
-fn parse_secret_ref(secret_ref: &str) -> anyhow::Result<(String, String)> {
-    let (service, account) = secret_ref
-        .split_once(':')
-        .with_context(|| format!("invalid secret ref: {secret_ref}"))?;
-    Ok((service.to_string(), account.to_string()))
 }
 
 fn resolve_env_for_profile(

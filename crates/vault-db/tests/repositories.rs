@@ -106,6 +106,38 @@ async fn set_credential_enabled_should_update_enabled_flag() {
 }
 
 #[tokio::test]
+async fn update_credential_secret_ref_should_replace_stored_reference() {
+    let test_store = temp_store().await;
+    let credential = sample_credential("openai", "migrate-me");
+
+    test_store
+        .store
+        .insert_credential(&credential)
+        .await
+        .expect("insert credential");
+    test_store
+        .store
+        .update_credential_secret_ref(
+            credential.id,
+            "dev.credential-broker.vault:credential:migrate-me:api_key",
+        )
+        .await
+        .expect("update secret ref");
+
+    let loaded = test_store
+        .store
+        .get_credential(credential.id)
+        .await
+        .expect("get credential")
+        .expect("credential exists");
+
+    assert_eq!(
+        loaded.secret_ref,
+        "dev.credential-broker.vault:credential:migrate-me:api_key"
+    );
+}
+
+#[tokio::test]
 async fn delete_credential_should_remove_row() {
     let test_store = temp_store().await;
     let credential = sample_credential("coingecko", "market-data");

@@ -30,12 +30,12 @@ pub async fn run_ui_command(_cmd: UiCommand) -> anyhow::Result<()> {
         .unwrap_or(false);
 
     if !is_running {
-        let pid = crate::commands::serve::spawn_background_server(DEFAULT_PORT)?;
-        eprintln!("Started vault server in background (pid: {pid})");
-        if !crate::commands::serve::wait_for_health(DEFAULT_PORT, 5).await {
-            bail!(
-                "Could not start vault server. Check port {DEFAULT_PORT} or run `vault serve` manually."
-            );
+        let (pid, started) =
+            crate::commands::serve::ensure_background_server_running(DEFAULT_PORT, 5).await?;
+        if started {
+            eprintln!("Started vault server in background (pid: {pid})");
+        } else {
+            eprintln!("Vault server is already running (pid: {pid})");
         }
     }
 

@@ -76,6 +76,16 @@ impl Store {
         Ok(())
     }
 
+    pub async fn update_credential_secret_ref(&self, id: Uuid, secret_ref: &str) -> Result<()> {
+        sqlx::query("UPDATE credentials SET secret_ref = ?2, updated_at = ?3 WHERE id = ?1")
+            .bind(id.to_string())
+            .bind(secret_ref)
+            .bind(Utc::now().to_rfc3339())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn delete_credential(&self, id: Uuid) -> Result<()> {
         sqlx::query("DELETE FROM credentials WHERE id = ?1")
             .bind(id.to_string())

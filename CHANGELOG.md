@@ -18,6 +18,9 @@ User-visible bullets live here; implementation detail lives in `git log`.
 
 ### Changed
 
+- **Phase 0 guidance now labels today's launcher-style flows as the compatibility baseline.** The architecture docs, phase plan, and CLI help distinguish env injection from the preferred brokered-access model, and no migration is required yet.
+- **Keychain service namespace renamed to `dev.credential-broker.vault`.** New credentials use the generic product-scoped name, while older private-namespace secret refs are migrated forward for backward compatibility.
+
 ### Deprecated
 
 ### Removed

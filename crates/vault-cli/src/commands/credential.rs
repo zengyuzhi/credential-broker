@@ -7,10 +7,11 @@ use uuid::Uuid;
 use vault_core::models::{Credential, CredentialKind};
 use vault_db::Store;
 use vault_providers::schema_for;
-use vault_secrets::{KEYCHAIN_SERVICE_NAME, SecretStore};
+use vault_secrets::{KEYCHAIN_SERVICE_NAME, SecretStore, parse_secret_ref};
 
 use crate::support::{
     config::current_database_url,
+    keychain_migration::migrate_legacy_credentials_in_store,
     prompt::{print_success, prompt_secret},
 };
 
@@ -64,6 +65,9 @@ pub enum CredentialSubcommand {
 }
 
 pub async fn run_credential_command(cmd: CredentialCommand) -> anyhow::Result<()> {
+    let store = Store::connect(&current_database_url()).await?;
+    let _ = migrate_legacy_credentials_in_store(&store).await?;
+
     match cmd.command {
         CredentialSubcommand::Add {
             provider,
@@ -219,7 +223,7 @@ async fn remove_credential(id: &str, yes: bool) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
         let keychain = vault_secrets::MacOsKeychainStore;
-        keychain.delete(&service, &account).await?;
+        keychain.delete(service, account).await?;
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -272,13 +276,6 @@ fn keychain_account_and_access_targets(
         "could not resolve any trusted application paths for Keychain ACL"
     );
     Ok((account, trusted_apps))
-}
-
-fn parse_secret_ref(secret_ref: &str) -> anyhow::Result<(String, String)> {
-    let (service, account) = secret_ref
-        .split_once(':')
-        .with_context(|| format!("invalid secret ref: {secret_ref}"))?;
-    Ok((service.to_string(), account.to_string()))
 }
 
 #[cfg(test)]
@@ -390,7 +387,7 @@ mod tests {
             provider: "openai".to_string(),
             kind: CredentialKind::ApiKey,
             label: "work-main".to_string(),
-            secret_ref: "ai.zyr1.vault:credential:test:api_key".to_string(),
+            secret_ref: "dev.credential-broker.vault:credential:test:api_key".to_string(),
             environment: "work".to_string(),
             owner: None,
             enabled: true,

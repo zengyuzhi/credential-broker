@@ -2,7 +2,9 @@ use anyhow::Result;
 use clap::Args;
 use vault_db::Store;
 
-use crate::support::config::current_database_url;
+use crate::support::{
+    config::current_database_url, keychain_migration::migrate_legacy_credentials_in_store,
+};
 
 #[derive(Debug, Args)]
 #[command(about = "Display usage statistics per provider")]
@@ -15,6 +17,7 @@ pub struct StatsCommand {
 
 pub async fn run_stats_command(cmd: StatsCommand) -> Result<()> {
     let store = Store::connect(&current_database_url()).await?;
+    let _ = migrate_legacy_credentials_in_store(&store).await?;
     let all_stats = store.usage_stats_by_provider().await?;
 
     // Apply provider filter (spec: filter before serialization).
@@ -102,7 +105,7 @@ mod tests {
             provider: "openai".to_string(),
             kind: CredentialKind::ApiKey,
             label: "test-key".to_string(),
-            secret_ref: "ai.zyr1.vault:credential:test:api_key".to_string(),
+            secret_ref: "dev.credential-broker.vault:credential:test:api_key".to_string(),
             environment: "test".to_string(),
             owner: None,
             enabled: true,

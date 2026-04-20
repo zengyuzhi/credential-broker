@@ -1,16 +1,19 @@
 # credential-broker
 
-A local credential broker that lets coding agents and scripts access API keys without seeing the raw secrets. Store credentials once in macOS Keychain, create named profiles that bundle providers together, then launch agent subprocesses or proxy HTTP requests — all with short-lived leases and full usage tracking.
+A local capability broker for coding agents and scripts. Store credentials once in macOS Keychain, then use the strongest access path a workflow supports: brokered HTTP access when a tool can talk to the local vault, or user-operated env-injection compatibility workflows when a legacy command cannot yet integrate cleanly.
 
 ## Why
 
 Coding agents (Codex, Claude Code, Cursor, etc.) need API keys to call LLMs, search APIs, and other services. Pasting keys into `.env` files or shell history is insecure and hard to audit. credential-broker solves this by:
 
 - **Storing secrets in macOS Keychain** with trusted-application ACLs — not in files
-- **Injecting credentials at runtime** via environment variables or an authenticated HTTP proxy
+- **Brokering HTTP requests when supported** so agents can use APIs without ever receiving raw keys on the supported path
+- **Keeping env injection available only as a user-operated compatibility path** for legacy tools that still need child-process credentials
 - **Issuing short-lived leases** so access is time-bounded and auditable
 - **Tracking every request** with provider, model, token count, and cost estimates
 - **Web dashboard** for real-time monitoring with PIN-based auth and live updates
+
+Agent-readable files such as `.env`, JSON, YAML, copied config snippets, and prompt transcripts are not part of the trust boundary. When plaintext migration is supported, it should be a user-triggered one-time import, not an agent path.
 
 ## Installation
 
@@ -36,6 +39,8 @@ cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
 
 Release history lives in [CHANGELOG.md](./CHANGELOG.md).
 The long-term product direction and design principles live in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+
+Phase 0 status: today's `credential`, `profile`, `run`, `serve`, `ui`, and `upgrade` flows remain supported as the compatibility baseline. No migration is required yet. Brokered access is the target model; env injection remains available only as a user-operated compatibility path for legacy tools.
 
 ## Upgrading
 
@@ -65,8 +70,8 @@ vault credential add openai work-main --kind api_key --env work
 vault profile create coding
 vault profile bind coding openai <credential-id> --mode inject
 
-# Launch an agent with injected credentials
-vault run --profile coding --agent codex -- your-command-here
+# Launch a legacy command with injected credentials (user-only compatibility path)
+vault run --profile coding --agent legacy-tool -- your-command-here
 
 # Open the web dashboard (auto-starts the server)
 vault ui
@@ -76,6 +81,8 @@ vault stats
 vault stats --json              # machine-readable output
 vault stats --provider openai   # filter by provider
 ```
+
+The quick-start flow above shows today's manual compatibility path (`vault run` + env injection). It is not the supported agent security model. When a tool or agent can talk to the local vault directly, prefer brokered access via `proxy` mode and the local HTTP gateway so the agent never receives the secret.
 
 ## Features
 
@@ -89,7 +96,7 @@ vault credential disable <id>
 vault credential remove <id> --yes
 ```
 
-Secrets are stored in macOS Keychain under service `ai.zyr1.vault` with trusted-application ACLs. The CLI binary is pre-authorized during credential creation so `vault run` works without Keychain prompts.
+Secrets are stored in macOS Keychain under service `dev.credential-broker.vault` with trusted-application ACLs. Existing installs are migrated onto the generic namespace during normal command execution. The CLI binary is pre-authorized during credential creation so `vault run` works without Keychain prompts.
 
 ### Profiles
 
@@ -102,12 +109,14 @@ vault profile show <name>
 vault profile bind <profile> <provider> <credential-id> --mode inject|proxy|either
 ```
 
-### Environment Injection (`vault run`)
+Use `proxy` when the tool or agent can talk to the local broker directly. `inject` remains a user-only compatibility fallback for legacy commands, and `either` is a mixed transitional mode for workflows that still need both surfaces during migration.
 
-Launch any command with provider credentials injected as environment variables:
+### Environment Injection (`vault run`, compatibility path)
+
+Launch any legacy command with provider credentials injected as environment variables:
 
 ```bash
-vault run --profile coding --agent codex --project my-app -- python main.py
+vault run --profile coding --agent legacy-tool --project my-app -- python main.py
 ```
 
 This:
@@ -119,7 +128,9 @@ This:
 6. Spawns the child process
 7. Records a launch event for auditing
 
-### HTTP Proxy
+This path remains supported because many legacy tools still expect raw credentials in the child environment, but it is weaker than brokered access because the child process can read the injected secrets directly. Treat it as a user-only compatibility mode, not the supported security model for agents.
+
+### HTTP Proxy (preferred brokered path when supported)
 
 For providers bound with `proxy` or `either` mode, the server forwards requests with credentials injected server-side:
 
@@ -127,7 +138,7 @@ For providers bound with `proxy` or `either` mode, the server forwards requests 
 # Start the server
 vault serve
 
-# Agent sends requests to the proxy instead of directly to the provider
+# Agent or tool sends requests to the proxy instead of directly to the provider
 curl -X POST http://127.0.0.1:8765/v1/proxy/openai/v1/chat/completions \
   -H "x-vault-lease-token: <token>" \
   -H "content-type: application/json" \

@@ -4,6 +4,7 @@
 
 This document describes the intended high-level architecture and design direction for `credential-broker`.
 It is not a low-level implementation spec and it does not claim that the current codebase already fully matches this target architecture.
+Phase 0 of this direction is intentionally non-breaking and treats today's credential/profile/run/serve model as the compatibility baseline while later phases build the broker-first model in parallel.
 
 Related execution framing lives in [docs/plans/2026-04-15-capability-broker-phase-plan.md](./plans/2026-04-15-capability-broker-phase-plan.md).
 
@@ -26,6 +27,8 @@ agents should use capabilities,
 not hold raw secrets
 ```
 
+For the official vault-managed agent path, this is a hard invariant, not a preference.
+
 ## First-Principles Constraints
 
 The architecture starts from a few hard constraints.
@@ -37,8 +40,8 @@ Some trusted component must eventually attach the real key, token, or credential
 
 ### 2. If an agent receives the raw secret, the secret is no longer protected from that agent
 
-This means environment-variable injection is a compatibility technique, not the strongest security model.
-The strongest path is one where the agent never sees the raw secret at all.
+This means the supported agent path MUST ensure the agent never sees the raw secret at all.
+Environment-variable injection may exist as a manual compatibility escape hatch, but it is not the agent security model.
 
 ### 3. If usage should be transparent, meaningful traffic must pass through one trusted local component
 
@@ -52,11 +55,52 @@ Users should not be required to hand-author every provider integration from scra
 
 An open-source project cannot sustainably scale by shipping bespoke Rust code for every API on the internet.
 
+## Hard Invariants
+
+The following rules define the target trust boundary and should be treated as non-negotiable.
+
+### 1. Agents never receive raw secrets on the official path
+
+If a workflow is described as a supported agent integration, the agent must receive capabilities, broker endpoints, or broker-issued sessions, never raw API keys, bearer tokens, cookies, or secret-bearing files.
+
+### 2. Agent-readable files are not secret boundaries
+
+`.env`, JSON, YAML, shell environment, shell history, copied config snippets, prompt transcripts, and other agent-readable files are not safe homes for secrets and must not be described as protected storage.
+
+### 3. The trusted secret boundary is intentionally narrow
+
+For this product, the trusted homes for raw secret material are:
+
+- the OS secret store
+- the `vault` broker process
+- user-triggered local input surfaces controlled by the user
+
+### 4. `vault run` is user-only compatibility
+
+Environment-variable injection may remain for manual user workflows, but it is not part of the supported agent security story and must never be presented as the recommended agent path.
+
+### 5. Plaintext import is migration, not steady state
+
+Import from `.env`, JSON, YAML, or copied config is allowed only as a user-triggered one-time migration path.
+After import, the secret should move into the trusted boundary and the plaintext source should be treated as legacy material to remove.
+An agent may help prepare an import plan, but the supported workflow must not require the agent to read the plaintext secret values.
+
+## Official Security Scope
+
+`credential-broker` guarantees only the official vault-managed path:
+
+- the agent talks to the local broker
+- the broker resolves the secret and talks to the upstream provider
+- telemetry and policy decisions are recorded centrally
+
+It does not claim to stop arbitrary same-user local processes from reading files or environment variables outside the broker.
+If a user keeps secrets in `.env` files or other agent-readable plaintext storage, those secrets remain outside the supported security boundary even if the product offers a one-time migration import.
+
 ## Product Goals
 
 ### Goal 1: Safe Agent Access
 
-Let AI agents use APIs such as OpenAI, Telegram Bot, GitHub, Twitter/X, Tavily, CoinGecko, and others without directly reading raw API keys whenever brokered access is possible.
+Let AI agents use APIs such as OpenAI, Telegram Bot, GitHub, Twitter/X, Tavily, CoinGecko, and others without ever receiving raw secrets on the supported vault-managed path.
 
 ### Goal 2: Low-Friction Setup
 
@@ -91,30 +135,33 @@ The vault should not primarily be:
 - a plaintext config manager
 - a generic file vault
 - a transparent network interceptor
+- an env manager for agent processes
 - a launcher that hands raw credentials to child processes and then steps aside
 
 ## Architectural Principles
 
 ### 1. Secrets Stay Local
 
-Secrets should be stored in the platform secret store and not persisted in plaintext files.
-The broker may materialize secrets in memory only when needed to fulfill an allowed request.
+Raw secrets should live in the platform secret store and in broker memory only when needed to fulfill an allowed request.
+Plaintext files are not the steady-state storage model.
+If a user migrates from `.env` or config files, that import should be explicit, local, and one-time.
 
 ### 2. Capabilities Beat Raw Credentials
 
-The preferred security model is:
+For agent workflows this is the required security model:
 
 - "agent may call `telegram.sendMessage`"
 - not "agent receives `TELEGRAM_BOT_TOKEN`"
 
 ### 3. The Broker Is the Trust Boundary
 
-The two trusted homes for secret material are:
+The trusted homes for secret material are:
 
 - the OS secret store
 - the broker process
+- user-triggered local input surfaces controlled by the user
 
-Agents, prompts, environment variables, and agent-readable files are not trusted secret boundaries.
+Agents, prompts, environment variables, `.env` files, JSON/YAML config, logs, transcripts, and other agent-readable files are not trusted secret boundaries.
 
 ### 4. Profiles Are UX, Not the Security Boundary
 
@@ -149,8 +196,8 @@ It should avoid TLS MITM, hidden traffic capture, or brittle auto-discovery of a
 
 ### 9. Compatibility Paths Must Be Honest
 
-Some tools can only work through environment-variable injection or direct credential exposure.
-The product may support that path, but it should clearly label it as weaker than brokered access.
+Some user-operated tools can only work through environment-variable injection or direct credential exposure.
+The product may support that path as a manual compatibility escape hatch, but it should clearly label it as weaker than brokered access and outside the supported agent security model.
 
 ## Trust and Request Flow
 
@@ -166,6 +213,30 @@ Agent
 ```
 
 In this model, the secret never crosses into the agent.
+
+## Agent Path vs User Path
+
+The architecture should distinguish these two paths explicitly.
+
+### Supported agent path
+
+The supported agent path is:
+
+```text
+Agent
+  -> local vault capability or gateway surface
+  -> broker-issued session or policy check
+  -> secret resolution inside the broker
+  -> upstream API call
+```
+
+On this path, the agent never receives raw secret material.
+
+### User-only compatibility path
+
+`vault run` and env injection may remain available for manual user workflows that still depend on child-process credentials.
+That path is not the supported agent model.
+It exists only as a compatibility layer for humans operating legacy tools.
 
 ## System Overview
 
@@ -242,7 +313,8 @@ Examples:
 
 ### Grant
 
-A policy object that binds capabilities to an agent, project, or workflow context under explicit limits such as TTL, scope, quota, or confirmation requirements.
+A policy object that binds capabilities to a named agent or tool identity under explicit limits such as TTL, scope, quota, or confirmation requirements.
+For a low-friction baseline, grants should not require project or workspace scoping by default.
 
 ### Session
 
@@ -374,8 +446,12 @@ This implies a setup surface where agents can safely:
 And where only the human can:
 
 - enter raw secret values
+- approve plaintext migration imports from `.env` or config files
 - reveal secrets
 - approve sensitive privilege expansions
+
+If the product supports importing `.env`, YAML, or JSON files, that import must be explicitly initiated by the user through a trusted local surface.
+The agent may help identify candidate variable names or draft the mapping, but the supported workflow must not require the agent to receive the plaintext file contents or secret values.
 
 ## Management and Observation Model
 
@@ -389,18 +465,19 @@ The system should provide one unified local view of:
 
 The management layer is a first-class product requirement.
 
-## Compatibility Mode
+## User-Only Compatibility Mode
 
 Some tools can only work by receiving environment variables or direct credentials.
-The architecture may support this path for pragmatism.
+The architecture may support this path for pragmatism, but only as a user-operated compatibility mode.
 
 But it should be clearly framed as:
 
 - compatibility mode
+- user-only
 - weaker than brokered access
-- not the ideal security story
+- not the supported agent security story
 
-The product should optimize for brokered access first.
+The product should optimize for brokered access first and should never present env injection as the recommended way for an agent to access an API.
 
 ## Evolution from the Current Model
 
@@ -430,6 +507,7 @@ This project is not intended to be:
 - a cloud secret manager
 - an enterprise multi-tenant IAM platform
 - a fully isolated sandbox against a malicious local process running as the same OS user
+- a system that keeps secrets safe while users continue storing them in agent-readable plaintext files
 - a transparent interception layer for arbitrary network traffic
 
 It is a local developer and agent control plane for safe, low-friction API access.
@@ -440,7 +518,7 @@ The architecture is succeeding when:
 
 - common APIs work out of the box through presets
 - users can add new APIs without patching Rust code
-- agents usually operate through brokered capabilities instead of raw secrets
+- supported agent workflows operate through brokered capabilities and never receive raw secrets
 - bundles remain easy to use while policy becomes more explicit
 - the user can see, in one place, what APIs exist, who can use them, and what happened
 

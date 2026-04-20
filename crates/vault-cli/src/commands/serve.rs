@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
+use vault_db::Store;
 
 use crate::support::config::{current_database_url, resolved_state_dir, state_dir};
+use crate::support::keychain_migration::migrate_legacy_credentials_in_store;
 
 const DEFAULT_PORT: u16 = 8765;
 
@@ -108,15 +110,10 @@ pub fn running_background_server_pid() -> Option<u32> {
 // ---------------------------------------------------------------------------
 
 /// Spawn the vault server as a detached background process.
-/// Returns the child PID on success. If the server is already running the
-/// existing PID is returned without spawning a second instance.
-pub fn spawn_background_server(port: u16) -> anyhow::Result<u32> {
-    // Check for an existing running instance.
-    if let Some((pid, path)) = read_pid() {
-        if is_process_alive(pid) {
-            eprintln!("Vault server is already running (pid: {})", pid);
-            return Ok(pid);
-        }
+/// Returns the spawned child handle so the caller can confirm that the new
+/// process, not an unrelated listener, became healthy.
+fn spawn_background_server(port: u16) -> anyhow::Result<Child> {
+    if let Some((_, path)) = read_pid() {
         // Stale PID file — clean it up before re-spawning.
         remove_pid_file(&path);
     }
@@ -143,30 +140,91 @@ pub fn spawn_background_server(port: u16) -> anyhow::Result<u32> {
 
     write_pid(pid)?;
 
-    Ok(pid)
+    Ok(child)
 }
 
 // ---------------------------------------------------------------------------
 // Health check poller
 // ---------------------------------------------------------------------------
 
-/// Poll `/health` until it returns 2xx or the timeout elapses.
-/// Returns `true` if the server became healthy within the timeout.
-pub async fn wait_for_health(port: u16, timeout_secs: u64) -> bool {
+enum SpawnHealth {
+    Ready,
+    Exited,
+    TimedOut,
+}
+
+async fn port_is_healthy(port: u16) -> bool {
     let client = reqwest::Client::new();
     let url = format!("http://127.0.0.1:{}/health", port);
+    client
+        .get(&url)
+        .send()
+        .await
+        .map(|resp| resp.status().is_success())
+        .unwrap_or(false)
+}
+
+/// Poll `/health` until it returns 2xx or the timeout elapses.
+/// Returns whether the freshly spawned child became healthy, exited early,
+/// or simply never became ready within the timeout.
+async fn wait_for_spawned_server(
+    child: &mut Child,
+    port: u16,
+    timeout_secs: u64,
+) -> anyhow::Result<SpawnHealth> {
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
 
     while start.elapsed() < timeout {
-        if let Ok(resp) = client.get(&url).send().await
-            && resp.status().is_success()
-        {
-            return true;
+        if child.try_wait()?.is_some() {
+            return Ok(SpawnHealth::Exited);
+        }
+        if port_is_healthy(port).await {
+            return Ok(SpawnHealth::Ready);
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
-    false
+
+    if child.try_wait()?.is_some() {
+        return Ok(SpawnHealth::Exited);
+    }
+
+    Ok(SpawnHealth::TimedOut)
+}
+
+pub async fn ensure_background_server_running(
+    port: u16,
+    timeout_secs: u64,
+) -> anyhow::Result<(u32, bool)> {
+    if let Some(pid) = running_background_server_pid() {
+        return Ok((pid, false));
+    }
+
+    if port_is_healthy(port).await {
+        bail!(
+            "Port {} is already responding to /health. Stop the existing service or choose another port.",
+            port
+        );
+    }
+
+    let mut child = spawn_background_server(port)?;
+    let pid = child.id();
+
+    match wait_for_spawned_server(&mut child, port, timeout_secs).await? {
+        SpawnHealth::Ready => Ok((pid, true)),
+        SpawnHealth::Exited => {
+            remove_pid_file(&pid_file_path());
+            bail!(
+                "Vault server exited before becoming healthy. Is port {} already in use?",
+                port
+            );
+        }
+        SpawnHealth::TimedOut => bail!(
+            "Vault server failed to start within {} seconds (pid: {}). Check .local/vault.log for details.",
+            timeout_secs,
+            pid
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -211,20 +269,19 @@ pub async fn run_serve_command(cmd: ServeCommand) -> anyhow::Result<()> {
 
         None => {
             if cmd.background {
-                let pid = spawn_background_server(cmd.port)?;
-                if !wait_for_health(cmd.port, 5).await {
-                    bail!(
-                        "Vault server failed to start within 5 seconds (pid: {}). \
-                         Check .local/vault.log for details.",
-                        pid
-                    );
+                let (pid, started) = ensure_background_server_running(cmd.port, 5).await?;
+                if started {
+                    eprintln!("Vault server started (pid: {})", pid);
+                } else {
+                    eprintln!("Vault server is already running (pid: {})", pid);
                 }
-                eprintln!("Vault server started (pid: {})", pid);
                 return Ok(());
             }
 
             // Foreground serve.
             let database_url = current_database_url();
+            let store = Store::connect(&database_url).await?;
+            let _ = migrate_legacy_credentials_in_store(&store).await?;
             eprintln!("Starting vault server on http://127.0.0.1:{}", cmd.port);
             match vaultd::start_server(&database_url, cmd.port).await {
                 Ok(()) => Ok(()),

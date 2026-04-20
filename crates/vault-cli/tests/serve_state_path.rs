@@ -1,8 +1,8 @@
 use std::{
     fs,
+    net::TcpListener,
     path::Path,
     process::{Command, Output},
-    sync::atomic::{AtomicU16, Ordering},
 };
 
 use tempfile::TempDir;
@@ -12,8 +12,11 @@ fn vault_bin() -> &'static str {
 }
 
 fn reserve_port() -> u16 {
-    static NEXT_PORT: AtomicU16 = AtomicU16::new(39000);
-    NEXT_PORT.fetch_add(1, Ordering::Relaxed)
+    TcpListener::bind(("127.0.0.1", 0))
+        .expect("bind ephemeral port")
+        .local_addr()
+        .expect("read local addr")
+        .port()
 }
 
 fn database_url(dir: &Path) -> String {
@@ -136,5 +139,55 @@ fn upgrade_check_should_refuse_when_background_server_was_started_from_another_c
         combined_output(&upgrade).contains("vault daemon is running"),
         "expected daemon refusal message, got: {}",
         combined_output(&upgrade)
+    );
+}
+
+#[test]
+fn serve_background_should_fail_cleanly_when_port_is_already_owned() {
+    let state_one = TempDir::new().expect("state one");
+    let state_two = TempDir::new().expect("state two");
+    let cwd_one = TempDir::new().expect("cwd one");
+    let cwd_two = TempDir::new().expect("cwd two");
+    let port = reserve_port();
+    let port_string = port.to_string();
+    let db_one = database_url(state_one.path());
+    let db_two = database_url(state_two.path());
+
+    let first = run_vault(
+        &["serve", "--port", &port_string, "--background"],
+        cwd_one.path(),
+        &db_one,
+    );
+    assert!(
+        first.status.success(),
+        "first start failed: {}",
+        combined_output(&first)
+    );
+
+    let second = run_vault(
+        &["serve", "--port", &port_string, "--background"],
+        cwd_two.path(),
+        &db_two,
+    );
+
+    let _ = run_vault(
+        &["serve", "--port", &port_string, "stop"],
+        cwd_one.path(),
+        &db_one,
+    );
+
+    assert!(
+        !second.status.success(),
+        "second start unexpectedly succeeded: {}",
+        combined_output(&second)
+    );
+    assert!(
+        combined_output(&second).contains("already responding to /health"),
+        "expected port-in-use message, got: {}",
+        combined_output(&second)
+    );
+    assert!(
+        !state_two.path().join("vault.pid").exists(),
+        "expected failed start to clean up its pid file"
     );
 }

@@ -5,7 +5,7 @@ context: |
   Workspace: 8 crates (vault-core, vault-db, vault-secrets, vault-providers, vault-policy, vault-telemetry, vault-cli, vaultd)
   Binaries: vault-cli (clap CLI), vaultd (axum HTTP daemon on 127.0.0.1:8765)
   Database: SQLite via sqlx, auto-migrated, at .local/vault.db
-  Secrets: macOS Keychain via security-framework, service name ai.zyr1.vault
+  Secrets: macOS Keychain via security-framework, service name dev.credential-broker.vault
   Testing: cargo test, TDD preferred, 49+ tests across all crates
   Linting: cargo clippy --workspace --all-targets -- -D warnings (strict, warnings=errors)
   Conventions: UUID v4 IDs as TEXT in SQLite, ISO 8601 timestamps, thiserror for domain errors, anyhow for plumbing
