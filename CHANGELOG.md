@@ -11,6 +11,22 @@ User-visible bullets live here; implementation detail lives in `git log`.
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+### Quality
+
+## [0.1.3] - 2026-04-20
+
+### Added
+
 - **`vault upgrade` self-update command** for macOS installs managed directly from GitHub Releases.
   - `vault upgrade --check` reports whether a newer release is available without downloading artifacts.
   - `vault upgrade --dry-run` performs release lookup, minisign verification, checksum validation, and extraction without replacing the installed binary.
@@ -48,6 +64,10 @@ User-visible bullets live here; implementation detail lives in `git log`.
 ### Quality
 
 - **User-acceptance-test release gate formalized** at [`docs/UAT.md`](docs/UAT.md) with 23 entries across 6 capability areas (CLI, dashboard, serve lifecycle, proxy, install/migration, security regression). Release procedure step 5 now runs the UAT pass before CHANGELOG rotation; golden-path failure or threshold miss (4/4 golden + ≥95% AUTO:ANY + ≥80% MANUAL:USER) blocks tag push. First AI-produced baseline run-log at [`docs/uat-runs/2026-04-14-v0.1.1-pre-ai.md`](docs/uat-runs/2026-04-14-v0.1.1-pre-ai.md) (`status: baseline-only`); v0.1.1 still requires a human-run UAT before tag. Canonical capability: `uat-release-gate`.
+
+### Known limitations
+
+- **Unsigned macOS binary.** Release assets are minisign-signed but still not Apple-signed or notarized. If Gatekeeper quarantines the download, remove the attribute with `xattr -d com.apple.quarantine ~/.local/bin/vault`.
 
 ## [0.1.0] - 2026-04-14
 
@@ -106,5 +126,6 @@ Initial personal release. macOS-only. Unsigned.
 - **Full usage parsing only for three providers.** OpenAI, Anthropic, and TwitterAPI adapters parse responses for token counts and cost estimates; other providers support inject + basic proxy forwarding only.
 - **No automatic CHANGELOG generation.** Entries are written by hand.
 
-[Unreleased]: https://github.com/zengyuzhi/credential-broker/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zengyuzhi/credential-broker/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/zengyuzhi/credential-broker/releases/tag/v0.1.3
 [0.1.0]: https://github.com/zengyuzhi/credential-broker/releases/tag/v0.1.0
