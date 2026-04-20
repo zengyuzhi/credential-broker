@@ -86,6 +86,15 @@ impl Store {
         Ok(())
     }
 
+    pub async fn touch_credential_last_used(&self, id: Uuid) -> Result<()> {
+        sqlx::query("UPDATE credentials SET last_used_at = ?2 WHERE id = ?1")
+            .bind(id.to_string())
+            .bind(Utc::now().to_rfc3339())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn delete_credential(&self, id: Uuid) -> Result<()> {
         sqlx::query("DELETE FROM credentials WHERE id = ?1")
             .bind(id.to_string())

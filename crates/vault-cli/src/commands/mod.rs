@@ -1,7 +1,12 @@
+pub mod bundle;
+pub mod capability;
+pub mod connector;
 pub mod credential;
+pub mod grant;
 pub mod profile;
 pub mod run;
 pub mod serve;
+pub mod session;
 pub mod stats;
 pub mod ui;
 pub mod upgrade;

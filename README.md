@@ -40,7 +40,7 @@ cargo install --git https://github.com/zengyuzhi/credential-broker vault-cli
 Release history lives in [CHANGELOG.md](./CHANGELOG.md).
 The long-term product direction and design principles live in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
-Phase 0 status: today's `credential`, `profile`, `run`, `serve`, `ui`, and `upgrade` flows remain supported as the compatibility baseline. No migration is required yet. Brokered access is the target model; env injection remains available only as a user-operated compatibility path for legacy tools.
+Phase 1 status: the broker core domain model (connectors, capabilities, grants, bundles, sessions) is now available alongside the existing compatibility baseline. Today's `credential`, `profile`, `run`, `serve`, `ui`, and `upgrade` flows continue to work unchanged. The new broker commands (`connector`, `capability`, `grant`, `bundle`, `session`) introduce the target capability model. Use `bundle from-profile` to bridge existing profiles into the new model. Brokered access is the target; env injection remains available only as a user-operated compatibility path for legacy tools.
 
 ## Upgrading
 
@@ -98,7 +98,38 @@ vault credential remove <id> --yes
 
 Secrets are stored in macOS Keychain under service `dev.credential-broker.vault` with trusted-application ACLs. Existing installs are migrated onto the generic namespace during normal command execution. The CLI binary is pre-authorized during credential creation so `vault run` works without Keychain prompts.
 
-### Profiles
+### Broker Domain (Phase 1)
+
+The broker domain model introduces capability-scoped access control. Connectors represent upstream API connections, capabilities are named actions a connector exposes, grants authorize agents to use capabilities, bundles group grants, and sessions are short-lived scoped tokens.
+
+```bash
+# Register a connector backed by an existing credential
+vault connector add my-openai --provider openai --credential <credential-id>
+
+# Define a capability the connector exposes
+vault capability add openai.chat --connector my-openai
+
+# Grant an agent access to that capability
+vault grant add --agent claude --capability <capability-id> --ttl 60
+
+# Group grants into a bundle
+vault bundle create dev-bundle
+vault bundle add-grant dev-bundle <grant-id>
+
+# Issue a short-lived session token scoped to the bundle
+vault session issue --bundle dev-bundle --agent claude --ttl 30
+vault session list
+```
+
+Convert existing profiles to bundles:
+
+```bash
+vault bundle from-profile coding --yes
+```
+
+This creates connectors, wildcard capabilities, and grants for each binding in the profile. The `--yes` flag is required because it creates broad wildcard grants.
+
+### Profiles (compatibility baseline)
 
 Profiles bundle multiple provider credentials into a named configuration:
 
@@ -226,11 +257,11 @@ vault-cli (binary, includes vault serve)
 
 | Crate | Responsibility |
 |-------|---------------|
-| `vault-core` | Domain types, `ProviderAdapter` trait, `VaultError` |
-| `vault-db` | SQLite persistence via sqlx (credentials, profiles, bindings, leases, usage events, UI sessions) |
+| `vault-core` | Domain types (`Credential`, `Profile`, `Lease`, `Connector`, `Capability`, `Grant`, `Bundle`, `Session`), the `ProviderAdapter` trait, `VaultError` |
+| `vault-db` | SQLite persistence via sqlx (credentials, profiles, bindings, leases, usage events, UI sessions, connectors, capabilities, grants, bundles, sessions) |
 | `vault-secrets` | `SecretStore` trait + macOS Keychain implementation with trusted-app ACLs |
 | `vault-providers` | Provider adapters (env mapping, upstream URLs, usage parsing) |
-| `vault-policy` | Lease issuance (UUID + blake3 hash) and environment policy enforcement |
+| `vault-policy` | Lease issuance, session issuance (UUID + blake3 hash), grant validation, and environment policy enforcement |
 | `vault-telemetry` | Usage event recording and rollup queries |
 | `vaultd` | Axum HTTP server: dashboard pages, auth, SSE, proxy routes (now a library crate) |
 
@@ -278,12 +309,14 @@ Cutting a release: see [docs/RELEASE.md](./docs/RELEASE.md).
 - The `security` CLI is invoked by absolute path (`/usr/bin/security`) to prevent PATH hijacking
 - Secrets are piped via stdin (not CLI arguments) to avoid process-list exposure
 - Leases are time-bounded (default 60 minutes) with blake3-hashed tokens
+- Broker sessions are capped at 1 week, scoped to bundles, and only include active grants
+- Session tokens are wrapped in `Zeroizing<String>` and never stored in plain heap allocations
 - Production credentials are blocked by default unless `allow_prod` is explicitly set
 - Dashboard uses PIN-based auth with per-session CSRF tokens and strict CORS
 
 ## Roadmap
 
-Post-v0.1.0 candidate work (Linux port, code signing, Homebrew tap, more provider adapters, token-budget policies, and more) is parked in [docs/ROADMAP.md](./docs/ROADMAP.md). Nothing there is committed — it's a reference, not a plan.
+The phased rollout plan lives in [docs/plans/2026-04-15-capability-broker-phase-plan.md](./docs/plans/2026-04-15-capability-broker-phase-plan.md). Phase 0 (compatibility baseline) and Phase 1 (broker core domain model) are complete. Phase 2 (model gateway) is next. Other candidate work (Linux port, code signing, Homebrew tap, more provider adapters) is parked in [docs/ROADMAP.md](./docs/ROADMAP.md).
 
 ## License
 

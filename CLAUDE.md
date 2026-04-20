@@ -101,13 +101,13 @@ vault-cli (binary)          vaultd (binary)
 
 ### Crate responsibilities
 
-- **vault-core** — Domain types (`Credential`, `Profile`, `Lease`, `UsageEvent`), the `ProviderAdapter` async trait, and `VaultError`. No internal deps — everything depends on this.
-- **vault-db** — `Store` wraps `SqlitePool`. Sub-modules (`credentials`, `profiles`, `bindings`, `leases`, `usage_events`) each implement CRUD. All queries use manual `map_*_row` functions (not `FromRow` derive).
+- **vault-core** — Domain types (`Credential`, `Profile`, `Lease`, `UsageEvent`, `Connector`, `Capability`, `Grant`, `Bundle`, `Session`), the `ProviderAdapter` async trait, and `VaultError`. No internal deps — everything depends on this.
+- **vault-db** — `Store` wraps `SqlitePool`. Sub-modules (`credentials`, `profiles`, `bindings`, `leases`, `usage_events`, `connectors`, `capabilities`, `grants`, `bundles`, `sessions`) each implement CRUD. All queries use manual `map_*_row` functions (not `FromRow` derive). `bundles.rs` imports `grants::map_grant_row` via `pub(crate)`.
 - **vault-secrets** — `SecretStore` trait with a macOS Keychain implementation (`security-framework`). New secrets are stored under service `dev.credential-broker.vault`; older private-namespace refs are migrated forward when encountered. Secret refs use format `<service>:<credential_id>:<field_name>`.
 - **vault-providers** — `ProviderAdapter` implementations (OpenAI, Anthropic, TwitterAPI). `registry::adapter_for()` returns the right adapter. `schema.rs` has static `ProviderSchema` definitions for 7 providers (only 3 have full adapters).
-- **vault-policy** — Lease issuance (`issue_lease` generates UUID token, blake3-hashes it) and `PolicyService` (blocks prod credentials unless `allow_prod` is set).
+- **vault-policy** — Lease issuance (`issue_lease`), session issuance (`issue_session`), both generate UUID tokens and blake3-hash them. `PolicyService` blocks prod credentials unless `allow_prod` is set and validates grant active status via `check_grant_active`.
 - **vault-telemetry** — `TelemetryWriter` persists `UsageEvent` rows via `Store`. `StatsSummary` struct for rollups.
-- **vault-cli** — Clap-derived CLI. Fully working: `credential add/list/enable/disable/remove`, `profile create/list/show/bind`, `run --profile <name> -- <cmd>`, `stats`. Records launch events via telemetry.
+- **vault-cli** — Clap-derived CLI. Compatibility commands: `credential add/list/enable/disable/remove`, `profile create/list/show/bind`, `run --profile <name> -- <cmd>`, `stats`. Broker commands: `connector add/list/show/enable/disable/remove`, `capability add/list/remove`, `grant add/list/revoke`, `bundle create/list/show/add-grant/from-profile/remove`, `session issue/list/revoke`. Records launch events via telemetry.
 - **vaultd** — Axum HTTP daemon. Routes: `GET /health`, `GET /stats/providers` (real rollup data), `POST /v1/proxy/{provider}/{*path}` (lease-authenticated upstream forwarding).
 
 ### Key data flow: `vault run`
@@ -140,6 +140,7 @@ Served by vaultd (embedded in vault-cli via `vault serve`). Stack: askama templa
 - Errors: `VaultError` (thiserror) for domain errors, `anyhow::Result` for plumbing
 - macOS-only for now: `vault-secrets` uses `security-framework` behind `#[cfg(target_os = "macos")]`
 - DB queries: use manual `map_*_row(SqliteRow) -> Result<T>` functions with `sqlx::Row::get()`, NOT `#[derive(FromRow)]`. Codec helpers: `access_mode_as_str()` / `parse_access_mode()`.
+- New domain types follow the layering order: `vault-core/models.rs` (struct) → `migrations/` (SQL) → `vault-db/` (CRUD module + register in `lib.rs` + add migration to `store.rs` MIGRATOR) → `vault-policy/` (issuance/validation) → `vault-cli/commands/` (CLI + register in `mod.rs` + `main.rs`).
 
 ## Gotchas
 
@@ -157,6 +158,20 @@ Served by vaultd (embedded in vault-cli via `vault serve`). Stack: askama templa
 - Monetary cost split brain: `UsageEvent.estimated_cost_micros: Option<i64>` is the internal/DB type; external JSON (`/v1/stats/providers`, `ProviderStats`) preserves the `estimated_cost_usd: f64` field name for backward compat via `CAST(SUM(...) AS REAL) / 1000000.0` at the SQL boundary.
 - DB backup convention before destructive migrations: `cp .local/vault.db .local/vault.db.pre-<NNNN>.bak`. `.local/` is gitignored so backups stay local.
 - Implementation plans live in `docs/plans/` — check there before starting new work.
+- `vault_policy::session::issue_session` follows the same pattern as `issue_lease`: `ttl_minutes: NonZeroU32`, returns `(Session, Zeroizing<String>)`. Reuses `lease::hash_token` for blake3 hashing.
+- Session token printed to CLI stdout must use a separate `Zeroizing<String>` line — never interpolate raw tokens into a `format!` call that produces a plain `String`.
+- `Store::insert_session_with_grants` wraps session + session_grants inserts in a single SQLite transaction. Use this instead of separate `insert_session` + `insert_session_grant` calls.
+- `list_active_sessions` / `list_expired_sessions` compare `expires_at` against a bound RFC3339 parameter (`Utc::now().to_rfc3339()`), NOT SQLite `datetime('now')` which uses incompatible format.
+- `bundle from-profile` requires `--yes` because it creates wildcard grants (`agent_name: "*"`, no expiry). It calls `ensure_environment_allowed` for each credential before proceeding.
+- Session issuance filters grants through `check_grant_active()` — only enabled, non-expired grants are attached to the session.
+- Session TTL is capped at 10,080 minutes (1 week) at the CLI boundary.
+- Grant `--ttl` and `--expires-days` must be positive; validated at the CLI boundary.
+- `session_grants` uses `INSERT OR IGNORE` (matching `bundle_grants` pattern) for idempotent retries.
+- `sessions.session_token_hash` has a UNIQUE index; `enabled` INTEGER columns have `CHECK(enabled IN (0,1))`.
+- Pre-existing bug: `leases.rs` uses `datetime('now')` for expiry comparisons, same format mismatch as the sessions bug fixed in Phase 1. Any new time-comparison query MUST use `Utc::now().to_rfc3339()` bound parameters, never SQLite `datetime('now')`.
+- All `vault-db` modules implement methods on the same `Store` struct — method name collisions across modules cause compile errors. Prefix with domain context (e.g. `get_broker_session_by_token_hash` vs `get_session_by_token_hash` in `ui_sessions`).
+- `vault-db` uses `extern crate self as sqlx` so `sqlx::query(...)` resolves to the local `sqlx_compat` shim. Transactions work via `self.pool.begin().await?` returning a `Transaction`; execute queries with `&mut *tx` as the executor, then `tx.commit().await?`.
+- `credential.last_used_at` is updated via `Store::touch_credential_last_used` in two places: `vault run` (after keychain read in `run.rs`) and proxy handler (after upstream response in `proxy.rs`). Both are fire-and-forget (`let _ =`).
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

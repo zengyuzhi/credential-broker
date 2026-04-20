@@ -38,6 +38,13 @@ static MIGRATOR: LazyLock<Migrator> = LazyLock::new(|| Migrator {
             )),
             false,
         ),
+        Migration::new(
+            4,
+            Cow::Borrowed("broker domain"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!("../../../migrations/0004_broker_domain.sql")),
+            false,
+        ),
     ]),
     ..Migrator::DEFAULT
 });

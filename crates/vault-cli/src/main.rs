@@ -3,8 +3,10 @@ mod support;
 
 use clap::{Parser, Subcommand};
 use commands::{
-    credential::run_credential_command, profile::run_profile_command, run::run_agent_command,
-    serve::run_serve_command, stats::run_stats_command, ui::run_ui_command,
+    bundle::run_bundle_command, capability::run_capability_command,
+    connector::run_connector_command, credential::run_credential_command, grant::run_grant_command,
+    profile::run_profile_command, run::run_agent_command, serve::run_serve_command,
+    session::run_session_command, stats::run_stats_command, ui::run_ui_command,
     upgrade::run_upgrade_command,
 };
 
@@ -41,6 +43,16 @@ enum Command {
     Serve(commands::serve::ServeCommand),
     #[command(about = "Check for and install a newer vault binary")]
     Upgrade(commands::upgrade::UpgradeCommand),
+    #[command(about = "Manage connectors (configured upstream API connections)")]
+    Connector(commands::connector::ConnectorCommand),
+    #[command(about = "Manage capabilities (named actions a connector exposes)")]
+    Capability(commands::capability::CapabilityCommand),
+    #[command(about = "Manage grants (agent authorizations to use capabilities)")]
+    Grant(commands::grant::GrantCommand),
+    #[command(about = "Manage bundles (named groupings of grants, evolving from profiles)")]
+    Bundle(commands::bundle::BundleCommand),
+    #[command(about = "Manage broker sessions (short-lived scoped tokens)")]
+    Session(commands::session::SessionCommand),
 }
 
 #[tokio::main]
@@ -55,6 +67,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Ui(cmd) => run_ui_command(cmd).await?,
         Command::Serve(cmd) => run_serve_command(cmd).await?,
         Command::Upgrade(cmd) => run_upgrade_command(cmd).await?,
+        Command::Connector(cmd) => run_connector_command(cmd).await?,
+        Command::Capability(cmd) => run_capability_command(cmd).await?,
+        Command::Grant(cmd) => run_grant_command(cmd).await?,
+        Command::Bundle(cmd) => run_bundle_command(cmd).await?,
+        Command::Session(cmd) => run_session_command(cmd).await?,
     }
     Ok(())
 }

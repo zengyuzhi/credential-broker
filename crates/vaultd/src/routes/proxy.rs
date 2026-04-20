@@ -210,6 +210,8 @@ pub async fn proxy_handler(
         tracing::warn!("failed to record proxy usage event: {err}");
     }
 
+    let _ = state.store.touch_credential_last_used(credential.id).await;
+
     // --- 9. Return upstream response ---
     Ok((status_code, response_body))
 }

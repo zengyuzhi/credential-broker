@@ -274,6 +274,8 @@ async fn resolve_bound_credentials(
             bail!("vault run is only implemented for macOS in Phase 1");
         };
 
+        let _ = store.touch_credential_last_used(credential.id).await;
+
         let field_name = infer_field_name(&credential.provider);
         resolved.push((
             credential.provider.clone(),
