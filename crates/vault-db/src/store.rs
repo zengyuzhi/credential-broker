@@ -45,6 +45,24 @@ static MIGRATOR: LazyLock<Migrator> = LazyLock::new(|| Migrator {
             Cow::Borrowed(include_str!("../../../migrations/0004_broker_domain.sql")),
             false,
         ),
+        Migration::new(
+            5,
+            Cow::Borrowed("usage events session link"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!(
+                "../../../migrations/0005_usage_events_session_link.sql"
+            )),
+            false,
+        ),
+        Migration::new(
+            6,
+            Cow::Borrowed("session grants request count"),
+            MigrationType::Simple,
+            Cow::Borrowed(include_str!(
+                "../../../migrations/0006_session_grants_request_count.sql"
+            )),
+            false,
+        ),
     ]),
     ..Migrator::DEFAULT
 });

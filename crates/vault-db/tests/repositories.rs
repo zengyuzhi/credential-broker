@@ -256,6 +256,8 @@ fn sample_usage_event(credential_id: Uuid) -> UsageEvent {
         latency_ms: 450,
         error_text: None,
         created_at: Utc::now(),
+        session_id: None,
+        bundle_id: None,
     }
 }
 

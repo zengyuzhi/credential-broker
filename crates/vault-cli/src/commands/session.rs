@@ -4,7 +4,7 @@ use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
 use uuid::Uuid;
 use vault_db::Store;
-use vault_policy::{service::PolicyService, session::issue_session};
+use vault_policy::session::{clamp_session_ttl, issue_session, select_attachable_grants};
 use zeroize::Zeroizing;
 
 use crate::support::{config::current_database_url, prompt::print_success};
@@ -79,18 +79,45 @@ async fn issue(
         bail!("bundle '{bundle_name}' has no grants — cannot issue session");
     }
 
-    let policy = PolicyService::default();
-    let active_grants: Vec<_> = grants
-        .iter()
-        .filter(|g| policy.check_grant_active(g).is_ok())
-        .collect();
-    if active_grants.is_empty() {
-        bail!("bundle '{bundle_name}' has no active grants — all are disabled or expired");
+    // Phase 1.1: select only grants scoped to this agent (wildcard `"*"`
+    // matches), active (enabled + not expired), and not requiring
+    // confirmation. Prevents cross-agent privilege leaks and keeps
+    // confirmation-required grants off unattended sessions until the
+    // interactive approval flow exists.
+    let selection = select_attachable_grants(&grants, agent_name);
+
+    if !selection.skipped_confirmation.is_empty() {
+        let skipped: Vec<String> = selection
+            .skipped_confirmation
+            .iter()
+            .map(|g| g.id.to_string())
+            .collect();
+        print_success(&format!(
+            "Note: skipped {} confirmation-required grant(s); interactive approval is not yet supported: {}",
+            skipped.len(),
+            skipped.join(", ")
+        ))?;
     }
 
-    let (session, raw_token) = issue_session(Some(bundle.id), agent_name, project, ttl_minutes);
+    if selection.attachable.is_empty() {
+        bail!(
+            "bundle '{bundle_name}' has no attachable grants for agent '{agent_name}' — \
+             all matching grants are disabled, expired, scoped to another agent, or require confirmation"
+        );
+    }
 
-    let grant_ids: Vec<Uuid> = active_grants.iter().map(|g| g.id).collect();
+    // Phase 1.1: cap the effective session TTL at the tightest
+    // `grant.ttl_minutes` across attached grants.
+    let (effective_ttl, clamped_to) = clamp_session_ttl(ttl_minutes, &selection.attachable);
+    if let Some(cap) = clamped_to {
+        print_success(&format!(
+            "Note: capping session TTL to {cap} minutes (tightest grant.ttl_minutes cap)"
+        ))?;
+    }
+
+    let (session, raw_token) = issue_session(Some(bundle.id), agent_name, project, effective_ttl);
+
+    let grant_ids: Vec<Uuid> = selection.attachable.iter().map(|g| g.id).collect();
     store
         .insert_session_with_grants(&session, &grant_ids)
         .await?;
@@ -104,6 +131,10 @@ async fn issue(
     ))?;
     let token_line = Zeroizing::new(format!("token={}", raw_token.as_str()));
     print_success(token_line.as_str())?;
+    print_success(
+        "Use: curl -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+         -d @body.json http://127.0.0.1:8765/v1/proxy/<provider>/<path>",
+    )?;
     Ok(())
 }
 

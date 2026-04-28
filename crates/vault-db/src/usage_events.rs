@@ -29,13 +29,13 @@ impl Store {
                 mode, operation, endpoint, model, request_count,
                 prompt_tokens, completion_tokens, total_tokens,
                 estimated_cost_micros, status_code, success, latency_ms,
-                error_text, created_at
+                error_text, created_at, session_id, bundle_id
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6,
                 ?7, ?8, ?9, ?10, ?11,
                 ?12, ?13, ?14,
                 ?15, ?16, ?17, ?18,
-                ?19, ?20
+                ?19, ?20, ?21, ?22
             )
             "#,
         )
@@ -59,6 +59,8 @@ impl Store {
         .bind(event.latency_ms)
         .bind(&event.error_text)
         .bind(event.created_at.to_rfc3339())
+        .bind(event.session_id.map(|id| id.to_string()))
+        .bind(event.bundle_id.map(|id| id.to_string()))
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -103,7 +105,7 @@ impl Store {
                    mode, operation, endpoint, model, request_count,
                    prompt_tokens, completion_tokens, total_tokens,
                    estimated_cost_micros, status_code, success, latency_ms,
-                   error_text, created_at
+                   error_text, created_at, session_id, bundle_id
             FROM usage_events
             ORDER BY created_at DESC
             LIMIT ?1
@@ -168,7 +170,7 @@ impl Store {
              mode, operation, endpoint, model, request_count, \
              prompt_tokens, completion_tokens, total_tokens, \
              estimated_cost_micros, status_code, success, latency_ms, \
-             error_text, created_at \
+             error_text, created_at, session_id, bundle_id \
              FROM usage_events \
              WHERE provider = ?1 \
              ORDER BY created_at DESC \
@@ -187,6 +189,14 @@ fn map_usage_event_row(row: sqlx::sqlite::SqliteRow) -> Result<UsageEvent> {
     let credential_id = Uuid::parse_str(row.get::<&str, _>("credential_id"))?;
     let lease_id = row
         .get::<Option<String>, _>("lease_id")
+        .map(|s| Uuid::parse_str(&s))
+        .transpose()?;
+    let session_id = row
+        .get::<Option<String>, _>("session_id")
+        .map(|s| Uuid::parse_str(&s))
+        .transpose()?;
+    let bundle_id = row
+        .get::<Option<String>, _>("bundle_id")
         .map(|s| Uuid::parse_str(&s))
         .transpose()?;
     let mode = parse_access_mode(row.get::<&str, _>("mode"))?;
@@ -213,5 +223,7 @@ fn map_usage_event_row(row: sqlx::sqlite::SqliteRow) -> Result<UsageEvent> {
         latency_ms: row.get("latency_ms"),
         error_text: row.get("error_text"),
         created_at,
+        session_id,
+        bundle_id,
     })
 }

@@ -232,6 +232,10 @@ Agent
 
 On this path, the agent never receives raw secret material.
 
+See [runtime-contract.md](./runtime-contract.md) for the wire-level
+specification of the proxy endpoint, session authentication, and
+attribution model.
+
 ### User-only compatibility path
 
 `vault run` and env injection may remain available for manual user workflows that still depend on child-process credentials.

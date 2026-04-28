@@ -334,3 +334,169 @@ async fn session_crud() {
         .expect("delete session");
     assert!(store.get_session(session.id).await.expect("get").is_none());
 }
+
+// --- Phase 1.1: candidate listing + per-grant quota counter ---------------
+
+/// Helper to wire up the minimum graph needed for `list_session_proxy_candidates`.
+async fn seed_session_with_grants(
+    store: &Store,
+    provider: &str,
+    connector_name: &str,
+    capability_name: &str,
+    agent_name: &str,
+    max_requests: Option<i64>,
+) -> (Uuid, Uuid) {
+    let cred = test_credential();
+    store.insert_credential(&cred).await.expect("insert cred");
+
+    let now = Utc::now();
+    let connector = Connector {
+        id: Uuid::new_v4(),
+        name: connector_name.into(),
+        provider: provider.into(),
+        credential_id: cred.id,
+        base_url: None,
+        enabled: true,
+        created_at: now,
+        updated_at: now,
+    };
+    store
+        .insert_connector(&connector)
+        .await
+        .expect("insert conn");
+
+    let cap = Capability {
+        id: Uuid::new_v4(),
+        connector_id: connector.id,
+        name: capability_name.into(),
+        description: None,
+        enabled: true,
+        created_at: now,
+    };
+    store.insert_capability(&cap).await.expect("insert cap");
+
+    let grant = Grant {
+        id: Uuid::new_v4(),
+        agent_name: agent_name.into(),
+        capability_id: cap.id,
+        ttl_minutes: None,
+        max_requests,
+        require_confirmation: false,
+        enabled: true,
+        created_at: now,
+        expires_at: None,
+    };
+    store.insert_grant(&grant).await.expect("insert grant");
+
+    let bundle = Bundle {
+        id: Uuid::new_v4(),
+        name: format!("b-{connector_name}"),
+        description: None,
+        source_profile_id: None,
+        created_at: now,
+        updated_at: now,
+    };
+    store.insert_bundle(&bundle).await.expect("insert bundle");
+    store
+        .add_grant_to_bundle(bundle.id, grant.id)
+        .await
+        .expect("add grant to bundle");
+
+    let session = Session {
+        id: Uuid::new_v4(),
+        bundle_id: Some(bundle.id),
+        agent_name: agent_name.into(),
+        project: None,
+        issued_at: now,
+        expires_at: now + chrono::Duration::minutes(60),
+        session_token_hash: format!("hash-{}", Uuid::new_v4()),
+        request_count: 0,
+    };
+    store
+        .insert_session_with_grants(&session, &[grant.id])
+        .await
+        .expect("insert session with grants");
+
+    (session.id, grant.id)
+}
+
+#[tokio::test]
+async fn list_session_proxy_candidates_returns_expected_rows() {
+    let store = test_store().await;
+    let (session_id, grant_id) = seed_session_with_grants(
+        &store,
+        "openai",
+        "my-openai",
+        "openai.chat",
+        "claude",
+        Some(5),
+    )
+    .await;
+
+    let candidates = store
+        .list_session_proxy_candidates(session_id, "openai")
+        .await
+        .expect("list candidates");
+    assert_eq!(candidates.len(), 1);
+    let c = &candidates[0];
+    assert_eq!(c.grant.id, grant_id);
+    assert_eq!(c.connector.name, "my-openai");
+    assert_eq!(c.capability.name, "openai.chat");
+    assert_eq!(c.session_grant_request_count, 0);
+    assert_eq!(c.grant.max_requests, Some(5));
+
+    // Provider mismatch returns zero candidates.
+    let empty = store
+        .list_session_proxy_candidates(session_id, "anthropic")
+        .await
+        .expect("list candidates anthropic");
+    assert!(empty.is_empty());
+}
+
+#[tokio::test]
+async fn increment_session_grant_request_count_bumps_counter() {
+    let store = test_store().await;
+    let (session_id, grant_id) = seed_session_with_grants(
+        &store,
+        "openai",
+        "my-openai",
+        "openai.chat",
+        "claude",
+        Some(3),
+    )
+    .await;
+
+    store
+        .increment_session_grant_request_count(session_id, grant_id)
+        .await
+        .expect("increment");
+    store
+        .increment_session_grant_request_count(session_id, grant_id)
+        .await
+        .expect("increment again");
+
+    let candidates = store
+        .list_session_proxy_candidates(session_id, "openai")
+        .await
+        .expect("list");
+    assert_eq!(candidates[0].session_grant_request_count, 2);
+}
+
+#[tokio::test]
+async fn list_session_proxy_candidates_excludes_disabled_cascade() {
+    let store = test_store().await;
+    let (session_id, grant_id) =
+        seed_session_with_grants(&store, "openai", "my-openai", "openai.chat", "claude", None)
+            .await;
+
+    // Disable the grant — SQL filter should drop it.
+    store
+        .set_grant_enabled(grant_id, false)
+        .await
+        .expect("disable grant");
+    let empty = store
+        .list_session_proxy_candidates(session_id, "openai")
+        .await
+        .expect("list");
+    assert!(empty.is_empty());
+}

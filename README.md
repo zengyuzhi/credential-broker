@@ -42,6 +42,16 @@ The long-term product direction and design principles live in [docs/ARCHITECTURE
 
 Phase 1 status: the broker core domain model (connectors, capabilities, grants, bundles, sessions) is now available alongside the existing compatibility baseline. Today's `credential`, `profile`, `run`, `serve`, `ui`, and `upgrade` flows continue to work unchanged. The new broker commands (`connector`, `capability`, `grant`, `bundle`, `session`) introduce the target capability model. Use `bundle from-profile` to bridge existing profiles into the new model. Brokered access is the target; env injection remains available only as a user-operated compatibility path for legacy tools.
 
+## Current Implementation Reality
+
+The target architecture is broker-first, but the current runtime surfaces are still transitional. The most important constraints to understand today are:
+
+- There is **no vault MCP server yet**. MCP-only agents still need an adapter layer or another host surface to talk to `vault`.
+- The HTTP proxy at `/v1/proxy/{provider}/{*path}` authenticates broker-native traffic with **`Authorization: Bearer <session-token>`** issued by `vault session issue`. The legacy **`x-vault-lease-token`** header remains as a compatibility path for `vault run` child processes. The wire contract is documented in [docs/runtime-contract.md](./docs/runtime-contract.md).
+- `vault run` is still the compatibility path for tools that only accept environment variables, and the child process can read the injected credentials directly.
+- Lease tokens are **short-lived but reusable until expiry**, not one-time-use codes, so they must be treated as sensitive runtime credentials.
+- Any step that requires entering a raw secret must still be completed by the **user**, not by the agent.
+
 ## Upgrading
 
 `vault` can self-update from GitHub Releases on macOS:
@@ -57,173 +67,364 @@ vault upgrade
 - `vault upgrade` refuses to run while a background `vault serve` daemon is active; stop it first with `vault serve stop`, then restart it after the upgrade.
 - Downgrades and same-version reinstalls are blocked by default. Use `vault upgrade --to <version> --force` only when you explicitly want that rollback path.
 
-## Quick Start
+## Typical Workflows
+
+### 1. Legacy tool compatibility flow
+
+Use this when the tool only knows how to read environment variables from its child process.
 
 ```bash
-# Build (produces 'vault' binary in target/debug/)
+# Build locally (or install from the release page)
 cargo build -p vault-cli
 
-# Store an API key (prompts securely, never shown in shell history)
+# Store the credential once in macOS Keychain
 vault credential add openai work-main --kind api_key --env work
 
-# Create a profile and bind the credential
+# Find the UUID you need for later commands
+vault credential list
+
+# Create a profile and bind the credential to it
 vault profile create coding
 vault profile bind coding openai <credential-id> --mode inject
 
-# Launch a legacy command with injected credentials (user-only compatibility path)
+# Launch the legacy command with injected env vars
 vault run --profile coding --agent legacy-tool -- your-command-here
 
-# Open the web dashboard (auto-starts the server)
+# Inspect what happened afterwards
+vault stats --provider openai
 vault ui
-
-# Check usage stats
-vault stats
-vault stats --json              # machine-readable output
-vault stats --provider openai   # filter by provider
 ```
 
-The quick-start flow above shows today's manual compatibility path (`vault run` + env injection). It is not the supported agent security model. When a tool or agent can talk to the local vault directly, prefer brokered access via `proxy` mode and the local HTTP gateway so the agent never receives the secret.
+This is today's quickest path, but it is a compatibility path only. The child process can read the injected secret, so it is not the supported agent-security model.
 
-## Features
+### 2. Broker-core flow (Phase 1 primitives)
 
-### Credential Management
+Use this when you want to model access as connector -> capability -> grant -> bundle -> session instead of handing a tool a raw key.
 
 ```bash
-vault credential add <provider> <label> [--kind api_key] [--env work]
+# Store the credential and find its UUID
+vault credential add openai work-main --kind api_key --env work
 vault credential list
-vault credential enable <id>
-vault credential disable <id>
-vault credential remove <id> --yes
+
+# Register a connector backed by that credential
+vault connector add work-openai --provider openai --credential <credential-id>
+
+# Define one named capability label on that connector
+vault capability add openai.responses.create --connector work-openai \
+  --description "Create OpenAI responses through the broker"
+
+# Find the capability UUID, then grant an agent access to it
+vault capability list --connector work-openai
+vault grant add --agent codex --capability <capability-id> --ttl 60
+
+# Group grants into a bundle and issue a scoped session token
+vault bundle create coding-bundle --description "Main coding workflow"
+vault bundle add-grant coding-bundle <grant-id>
+vault session issue --bundle coding-bundle --agent codex --project credential-broker --ttl 30
+
+# Start the local broker surfaces
+vault serve --background
+vault ui
 ```
 
-Secrets are stored in macOS Keychain under service `dev.credential-broker.vault` with trusted-application ACLs. Existing installs are migrated onto the generic namespace during normal command execution. The CLI binary is pre-authorized during credential creation so `vault run` works without Keychain prompts.
+`openai.responses.create` is currently a user-defined capability name, not an auto-discovered upstream endpoint. Choose a stable action label that will still make sense in grants, bundles, and audit logs. Today `vault capability add` does not require you to know the raw HTTP path.
 
-### Broker Domain (Phase 1)
+This is the target security direction, but the runtime path is still transitional. Phase 1.1 is where session-backed broker access becomes a real agent integration surface. Phase 2 is where brokered model access becomes the default day-to-day path.
 
-The broker domain model introduces capability-scoped access control. Connectors represent upstream API connections, capabilities are named actions a connector exposes, grants authorize agents to use capabilities, bundles group grants, and sessions are short-lived scoped tokens.
+### 3. Bridge an existing profile into the broker model
 
-```bash
-# Register a connector backed by an existing credential
-vault connector add my-openai --provider openai --credential <credential-id>
-
-# Define a capability the connector exposes
-vault capability add openai.chat --connector my-openai
-
-# Grant an agent access to that capability
-vault grant add --agent claude --capability <capability-id> --ttl 60
-
-# Group grants into a bundle
-vault bundle create dev-bundle
-vault bundle add-grant dev-bundle <grant-id>
-
-# Issue a short-lived session token scoped to the bundle
-vault session issue --bundle dev-bundle --agent claude --ttl 30
-vault session list
-```
-
-Convert existing profiles to bundles:
+Use this when you already have compatibility profiles and want to move toward bundles and grants without rebuilding everything by hand.
 
 ```bash
+# Review the old profile
+vault profile show coding
+
+# Convert it into a bundle
 vault bundle from-profile coding --yes
+
+# Inspect the resulting bundle and active grants
+vault bundle show coding
+vault grant list
 ```
 
-This creates connectors, wildcard capabilities, and grants for each binding in the profile. The `--yes` flag is required because it creates broad wildcard grants.
+The conversion creates broad wildcard grants for the profile's existing bindings, so `--yes` is required to make that trade-off explicit.
 
-### Profiles (compatibility baseline)
+## CLI Reference
 
-Profiles bundle multiple provider credentials into a named configuration:
+### Root command
+
+- `vault --help`
+  Prints the top-level command list and short descriptions.
+- `vault --version`
+  Prints the installed version. Useful before `vault upgrade` or when debugging a release issue.
+
+### `vault credential`
+
+Use `vault credential` to manage stored secret material. Credentials are kept in macOS Keychain under service `dev.credential-broker.vault` with trusted-application ACLs. Existing installs are migrated onto the generic namespace during normal command execution.
+
+- `vault credential add <provider> <label> [--kind <kind>] [--env <env>]`
+  Stores a new credential in Keychain. This is usually the first command you run for any provider.
+- `vault credential list`
+  Lists all stored credentials and their UUIDs. Use this when you forgot a credential ID for later commands.
+- `vault credential enable <id>`
+  Re-enables a previously disabled credential.
+- `vault credential disable <id>`
+  Disables a credential without deleting it, so profiles and connectors stop using it.
+- `vault credential remove <id> --yes`
+  Permanently removes the credential metadata and its Keychain secret.
+
+Typical use:
 
 ```bash
-vault profile create <name>
-vault profile list
-vault profile show <name>
-vault profile bind <profile> <provider> <credential-id> --mode inject|proxy|either
+vault credential add openai work-main --kind api_key --env work
+vault credential list
 ```
 
-Use `proxy` when the tool or agent can talk to the local broker directly. `inject` remains a user-only compatibility fallback for legacy commands, and `either` is a mixed transitional mode for workflows that still need both surfaces during migration.
+### `vault profile`
 
-### Environment Injection (`vault run`, compatibility path)
+Use `vault profile` for the compatibility baseline. A profile groups provider bindings for `vault run` and for older flows that still think in provider-level access instead of capability-level access.
 
-Launch any legacy command with provider credentials injected as environment variables:
+- `vault profile create <name>`
+  Creates an empty profile.
+- `vault profile list`
+  Lists all profiles.
+- `vault profile show <name>`
+  Shows one profile and all of its bindings.
+- `vault profile bind <profile> <provider> <credential-id> --mode <inject|proxy|either>`
+  Binds a stored credential to a provider inside the profile.
+
+Mode meanings:
+
+- `inject`: env-injection compatibility only
+- `proxy`: prefer brokered HTTP forwarding when the tool can talk to the local vault
+- `either`: mixed transitional mode during migration
+
+Typical use:
+
+```bash
+vault profile create coding
+vault profile bind coding openai <credential-id> --mode inject
+vault profile show coding
+```
+
+### `vault run`
+
+Use `vault run` only when a tool still expects credentials in the child-process environment. This is a user-operated compatibility path, not the recommended agent-security path.
+
+`vault run --profile <profile> [--agent <agent>] [--project <project>] -- <command>...`
+
+What it does:
+
+- resolves all `inject` and `either` bindings from the profile
+- reads the secrets from Keychain
+- injects provider env vars such as `OPENAI_API_KEY`
+- injects vault metadata such as `VAULT_PROFILE`, `VAULT_AGENT`, `VAULT_LEASE_TOKEN`, `VAULT_PROJECT`
+- records a launch event for auditing
+
+Typical use:
 
 ```bash
 vault run --profile coding --agent legacy-tool --project my-app -- python main.py
 ```
 
-This:
-1. Resolves all `inject`/`either` bindings for the profile
-2. Reads secrets from Keychain (non-interactive, no prompts)
-3. Maps them to provider-specific env vars (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
-4. Issues a short-lived lease (blake3-hashed token)
-5. Injects `VAULT_PROFILE`, `VAULT_AGENT`, `VAULT_LEASE_TOKEN`, `VAULT_PROJECT`
-6. Spawns the child process
-7. Records a launch event for auditing
+### `vault serve`
 
-This path remains supported because many legacy tools still expect raw credentials in the child environment, but it is weaker than brokered access because the child process can read the injected secrets directly. Treat it as a user-only compatibility mode, not the supported security model for agents.
+Use `vault serve` to run the local HTTP server that backs the dashboard and brokered proxy surfaces.
 
-### HTTP Proxy (preferred brokered path when supported)
+- `vault serve`
+  Starts the server in the foreground.
+- `vault serve --background`
+  Starts the server in the background and writes a PID file next to the active database.
+- `vault serve --port <port>`
+  Overrides the default port `8765`.
+- `vault serve status`
+  Checks whether the background server is running.
+- `vault serve stop`
+  Stops the background server.
 
-For providers bound with `proxy` or `either` mode, the server forwards requests with credentials injected server-side:
+Typical use:
 
 ```bash
-# Start the server
-vault serve
+vault serve --background
+vault serve status
+```
 
-# Agent or tool sends requests to the proxy instead of directly to the provider
+### `vault ui`
+
+Use `vault ui` to open the browser dashboard. If the server is not already running, `vault ui` starts it in the background first.
+
+`vault ui`
+
+The dashboard includes Home, Credentials, Profiles, Stats, and Sessions pages, uses PIN-based auth, and never returns raw secrets to the browser.
+
+### `vault stats`
+
+Use `vault stats` to inspect aggregated provider usage.
+
+- `vault stats`
+  Human-readable text output.
+- `vault stats --json`
+  Machine-readable JSON array.
+- `vault stats --provider <provider>`
+  Restricts the output to one provider.
+
+Typical use:
+
+```bash
+vault stats
+vault stats --provider openai
+vault stats --json
+```
+
+### `vault upgrade`
+
+Use `vault upgrade` to self-update from GitHub Releases on macOS.
+
+- `vault upgrade --check`
+  Compares your installed version with the latest release without downloading artifacts.
+- `vault upgrade --dry-run`
+  Downloads release metadata and verifies signatures and checksums without replacing the current binary.
+- `vault upgrade`
+  Performs the full upgrade.
+- `vault upgrade --to <version> --force`
+  Installs a specific version, including rollback or same-version reinstall when you explicitly opt in.
+
+`vault upgrade` refuses to run while a background `vault serve` daemon is active. Stop it first with `vault serve stop`.
+
+### Phase 1 broker commands
+
+These commands introduce the broker-native domain model:
+
+```text
+credential -> connector -> capability -> grant -> bundle -> session
+```
+
+`credential` stores the real secret. `connector` says how to talk to the upstream API. `capability` names an allowed action. `grant` gives an agent permission to use that capability. `bundle` groups grants into a workflow package. `session` is the short-lived runtime token the broker issues.
+
+### `vault connector`
+
+Use `vault connector` to register an upstream API connection backed by an existing credential.
+
+- `vault connector add <name> --provider <provider> --credential <credential-id> [--base-url <url>]`
+  Creates a connector.
+- `vault connector list`
+  Lists all connectors.
+- `vault connector show <name>`
+  Shows the connector details.
+- `vault connector enable <name>`
+  Enables a connector.
+- `vault connector disable <name>`
+  Disables a connector.
+- `vault connector remove <name> --yes`
+  Removes a connector and its capabilities.
+
+Typical use:
+
+```bash
+vault connector add work-openai --provider openai --credential <credential-id>
+vault connector show work-openai
+```
+
+### `vault capability`
+
+Use `vault capability` to define named actions that a connector exposes.
+
+- `vault capability add <name> --connector <connector> [--description <text>]`
+  Adds one named capability to a connector.
+- `vault capability list [--connector <connector>]`
+  Lists all capabilities, optionally filtered to one connector.
+- `vault capability remove <id> --yes`
+  Removes a capability by UUID.
+
+Typical use:
+
+```bash
+vault capability add openai.responses.create --connector work-openai \
+  --description "Create model responses"
+vault capability list --connector work-openai
+```
+
+Today the capability name is user-defined. It is best treated as a stable broker action label such as `openai.responses.create`, `telegram.sendMessage`, or `github.issues.create`. It is not automatically inferred from the upstream provider, and you do not need to know the exact upstream endpoint to create it. Over time, presets and import flows should generate most capability names for you.
+
+### `vault grant`
+
+Use `vault grant` to authorize an agent identity to use a capability.
+
+- `vault grant add --agent <agent> --capability <capability-id> [--ttl <minutes>] [--max-requests <n>] [--confirm] [--expires-days <days>]`
+  Creates a grant with optional limits and confirmation requirements.
+- `vault grant list [--agent <agent>]`
+  Lists grants, optionally filtered to one agent.
+- `vault grant revoke <id> --yes`
+  Deletes a grant.
+
+Typical use:
+
+```bash
+vault grant add --agent codex --capability <capability-id> --ttl 60 --max-requests 100
+vault grant list --agent codex
+```
+
+### `vault bundle`
+
+Use `vault bundle` to group grants into one named workflow package. This is the concept that existing profiles will gradually evolve into.
+
+- `vault bundle create <name> [--description <text>]`
+  Creates an empty bundle.
+- `vault bundle list`
+  Lists bundles.
+- `vault bundle show <name>`
+  Shows one bundle and its attached grants.
+- `vault bundle add-grant <bundle> <grant-id>`
+  Adds a grant to a bundle.
+- `vault bundle from-profile <profile> [--name <name>] --yes`
+  Converts an existing profile into a bundle as a compatibility bridge.
+- `vault bundle remove <name> --yes`
+  Removes a bundle.
+
+Typical use:
+
+```bash
+vault bundle create coding-bundle --description "Main coding workflow"
+vault bundle add-grant coding-bundle <grant-id>
+vault bundle show coding-bundle
+```
+
+### `vault session`
+
+Use `vault session` to issue and inspect short-lived runtime authorization tokens scoped to bundles.
+
+- `vault session issue --bundle <bundle> --agent <agent> [--project <project>] [--ttl <minutes>]`
+  Issues a new session token.
+- `vault session list`
+  Lists active sessions.
+- `vault session revoke <id>`
+  Revokes a session by UUID.
+
+Typical use:
+
+```bash
+vault session issue --bundle coding-bundle --agent codex --project credential-broker --ttl 30
+vault session list
+```
+
+Today this command creates a broker primitive and future-facing authorization object, but the current `/v1/proxy/...` HTTP surface still expects `x-vault-lease-token`, not a session token.
+
+### Brokered HTTP access via `vault serve`
+
+When a tool can talk to the local vault directly, prefer brokered HTTP access instead of `vault run`.
+
+```bash
+vault serve --background
+
 curl -X POST http://127.0.0.1:8765/v1/proxy/openai/v1/chat/completions \
   -H "x-vault-lease-token: <token>" \
   -H "content-type: application/json" \
   -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-The proxy:
-- Authenticates via lease token (blake3 hash lookup + expiry check)
-- Injects the real API key (agent never sees it)
-- Forwards to the upstream provider
-- Parses the response for usage data (tokens, model, cost)
-- Records a telemetry event
+In this path the agent or tool sends requests to the local broker, the broker injects the real key server-side, and telemetry is recorded centrally.
 
-### Web Dashboard
-
-A browser-based dashboard for monitoring credentials, sessions, and usage — no npm or build step required.
-
-```bash
-vault ui    # auto-starts server, generates PIN, opens browser
-```
-
-**Pages:** Home (overview stats), Credentials (enable/disable toggle), Profiles (expandable bindings), Stats (provider filter), Sessions (active/expired leases)
-
-**Security:**
-- PIN-based auth (6-digit, 5-minute expiry, burned after 5 failed attempts)
-- Per-session CSRF tokens on all mutating requests
-- httpOnly + SameSite=Strict cookies
-- CORS locked to `127.0.0.1:8765`
-- Secrets never appear in any dashboard response
-
-**Live updates:** SSE endpoint polls SQLite every 2 seconds — changes from CLI commands (e.g., `vault run`, `vault credential disable`) appear in the dashboard automatically.
-
-### Server Management
-
-```bash
-vault serve                  # foreground (blocks until Ctrl+C)
-vault serve --background     # background with PID file
-vault serve --port 9000      # custom port
-vault serve status           # check if running
-vault serve stop             # stop background server
-```
-
-`vault ui` auto-starts the server in the background if it's not already running.
-
-### Usage Stats
-
-```bash
-vault stats                          # text output
-vault stats --json                   # JSON array for scripting
-vault stats --provider openai        # filter by provider
-vault stats --json --provider openai # combined
-```
-
-Shows aggregated usage per provider: request count, prompt/completion tokens, estimated cost, last used timestamp. Also available via HTTP at `GET /v1/stats/providers`.
+Current limitation: this HTTP surface still authenticates with a lease token. In practice that means a caller must already have a valid `x-vault-lease-token`, so this is not yet a complete MCP-native or session-native agent interface.
 
 ## Supported Providers
 
@@ -316,7 +517,7 @@ Cutting a release: see [docs/RELEASE.md](./docs/RELEASE.md).
 
 ## Roadmap
 
-The phased rollout plan lives in [docs/plans/2026-04-15-capability-broker-phase-plan.md](./docs/plans/2026-04-15-capability-broker-phase-plan.md). Phase 0 (compatibility baseline) and Phase 1 (broker core domain model) are complete. Phase 2 (model gateway) is next. Other candidate work (Linux port, code signing, Homebrew tap, more provider adapters) is parked in [docs/ROADMAP.md](./docs/ROADMAP.md).
+The phased rollout plan lives in [docs/plans/2026-04-15-capability-broker-phase-plan.md](./docs/plans/2026-04-15-capability-broker-phase-plan.md). Phase 0 (compatibility baseline) and Phase 1 (broker core domain model) are complete. Phase 1.1 (agent-access bridge) is next, followed by Phase 2 (model gateway). Other candidate work (Linux port, code signing, Homebrew tap, more provider adapters) is parked in [docs/ROADMAP.md](./docs/ROADMAP.md).
 
 ## License
 

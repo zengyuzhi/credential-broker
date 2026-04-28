@@ -84,6 +84,10 @@ pub struct UsageEvent {
     pub latency_ms: i64,
     pub error_text: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// Phase 1.1: set when the request was authorized via a broker session.
+    pub session_id: Option<Uuid>,
+    /// Phase 1.1: bundle the session was scoped to (copied from session for ease of query).
+    pub bundle_id: Option<Uuid>,
 }
 
 // --- Phase 1: Broker core domain model ---

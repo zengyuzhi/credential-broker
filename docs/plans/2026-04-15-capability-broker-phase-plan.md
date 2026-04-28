@@ -104,11 +104,52 @@ Introduce the target concepts without trying to solve every integration at once.
 - broker-issued scoped sessions exist as a stable primitive
 - bundles can be mapped from or coexist with current profiles
 
+## Phase 1.1: Agent Access Bridge and Runtime Contract
+
+### Intent
+
+Turn the new broker concepts into one real supported machine-facing access path before trying to polish the full model-gateway experience.
+
+### What this phase is for
+
+- make the official agent path real rather than only architectural
+- wire broker-issued session authority into the runtime request path
+- define a minimal integration contract that MCP hosts, tool wrappers, and lightweight adapters can rely on
+- keep compatibility profiles and lease-based flows working while the broker-native path becomes the preferred agent route
+
+### Expected user experience
+
+- users can give an agent or agent-hosting tool scoped broker access without handing it the upstream secret
+- there is one clear answer to how an external agent surface should talk to `vault`
+- future MCP integrations and other adapters have a stable local contract to target
+
+### Expected technical outcome
+
+- runtime auth is centered on bundles, grants, and sessions rather than legacy profile/lease plumbing alone
+- the broker exposes a stable loopback request contract for machine callers
+- machine callers receive only broker-issued runtime credentials; upstream credential material stays inside the OS secret store and the `vault` broker process
+- request attribution, telemetry, and policy decisions attach to real session-scoped traffic
+- later model and action gateways can build on the same auth and invocation layer instead of inventing their own
+
+### What is explicitly not expected yet
+
+- no requirement to ship a polished vault MCP server in this phase
+- no requirement to finish the full OpenAI-compatible or Anthropic day-to-day UX yet
+- not every provider family or action API needs to be migrated
+- catalog and import flows can remain minimal
+
+### Exit criteria
+
+- at least one official agent-facing request path is authenticated by broker-native session-scoped auth rather than only legacy lease/profile wiring
+- the docs can point to one clear supported runtime contract for agent integrations
+- `vault run` and compatibility profiles still work, but are clearly secondary for agent usage
+- Phase 2 can focus on model ergonomics and reliability rather than auth plumbing
+
 ## Phase 2: Model Gateway First
 
 ### Intent
 
-Make brokered model access the first serious everyday path so agents can use LLM APIs without being handed raw keys.
+Build on the Phase 1.1 runtime contract so brokered model access becomes the first serious everyday path for LLM use without handing agents raw keys.
 
 ### What this phase is for
 
@@ -120,7 +161,7 @@ Make brokered model access the first serious everyday path so agents can use LLM
 
 - OpenAI-compatible gateway
 - Anthropic-native support or a clearly-scoped equivalent next family
-- session-scoped auth to the local broker
+- model-facing broker surfaces built on the Phase 1.1 agent-access contract
 - telemetry for request count, latency, failures, and cost estimates
 
 ### Expected user experience
@@ -132,6 +173,7 @@ Make brokered model access the first serious everyday path so agents can use LLM
 ### Expected technical outcome
 
 - the model gateway is reliable enough for normal agent workflows
+- the model gateway reuses the shared agent-facing auth/runtime contract instead of a one-off path
 - model requests are auditable end-to-end
 - cost and usage data are attached to session and bundle context
 
@@ -156,7 +198,7 @@ Expand beyond model inference into APIs with real side effects, where capability
 
 - model actions as capabilities rather than just URLs
 - enable safer use of APIs like Telegram, GitHub, and Twitter/X
-- introduce richer grants, confirmation hooks, and scoped policies
+- introduce richer grants, confirmation hooks, and scoped policies on top of the same agent-facing runtime contract
 
 ### Expected scope
 
@@ -220,7 +262,7 @@ Make setup easy enough that the product can scale beyond hand-curated built-ins 
 ### Expected technical outcome
 
 - most integrations are data-driven
-- protocol-family engines are reused by presets and imports
+- protocol-family engines and the Phase 1.1 integration contract are reused by presets and imports
 - the setup flow has a clean split between safe agent actions and human-only secret entry
 
 ### What is explicitly not expected yet
@@ -252,7 +294,7 @@ Make the control plane visible and coherent enough that the new architecture bec
   - secrets and attached connectors
   - grants and bundle composition
   - active sessions and expiry
-  - request history and cost
+  - request history, cost, and session-linked broker activity
   - policy decisions and denied actions
 - compatibility-mode labeling for env injection
 - migration path from old profiles/bindings to bundles/grants
@@ -329,6 +371,10 @@ After the product identity is coherent, invest in durability, distribution, and 
 
 The project has the right language and trust boundary.
 
+### By the end of Phase 1.1
+
+The broker has one real agent-facing runtime contract.
+
 ### By the end of Phase 2
 
 The broker is useful for everyday model access.
@@ -354,8 +400,9 @@ The product is hardened, easier to adopt, and ready for broader ecosystem growth
 If the work needs to be prioritized aggressively, the recommended order is:
 
 1. Phase 0 and Phase 1 first
-2. Phase 2 immediately after, because model access is the easiest broker win
-3. Phase 3 next, because action APIs are the real capability test
-4. Phase 4 after that, to make growth sustainable
-5. Phase 5 to unify the user-facing story
-6. Phase 6 only after the broker-first identity is stable
+2. Phase 1.1 next, because the agent-facing runtime contract should exist before gateway polish
+3. Phase 2 immediately after, because model access is still the easiest broker win
+4. Phase 3 next, because action APIs are the real capability test
+5. Phase 4 after that, to make growth sustainable
+6. Phase 5 to unify the user-facing story
+7. Phase 6 only after the broker-first identity is stable

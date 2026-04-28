@@ -205,6 +205,8 @@ pub async fn run_agent_command(cmd: RunCommand) -> anyhow::Result<()> {
                 Some(format!("exit {status}"))
             },
             created_at: chrono::Utc::now(),
+            session_id: None,
+            bundle_id: None,
         };
         if let Err(err) = telemetry.write_usage_event(&launch_event).await {
             debug_log(format!("failed to record launch event: {err}"));
